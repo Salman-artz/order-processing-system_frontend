@@ -12,8 +12,8 @@ export default function Sidebar() {
   const isAdmin = user?.role === "ADMIN";
 
   const customerLinks = [
-    { name: "Products", href: "/products", icon: Package },
-    { name: "My Orders", href: "/orders", icon: ShoppingCart },
+    { name: "Products", href: "/customer/products", icon: Package },
+    { name: "My Orders", href: "/customer/orders", icon: ShoppingCart },
   ];
 
   const adminLinks = [

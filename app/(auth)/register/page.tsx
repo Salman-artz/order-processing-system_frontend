@@ -1,93 +1,195 @@
 "use client";
 
-import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import api from "@/lib/api/client";
+import { toast } from "sonner";
 
+/* -------------------------------------------------------------------------- */
+/*  Zod schema — full edge-case coverage                                       */
+/* -------------------------------------------------------------------------- */
+const schema = z.object({
+  name: z
+    .string()
+    .min(2, "Name must be at least 2 characters")
+    .max(100, "Name is too long")
+    .regex(/^[a-zA-Z\s'-]+$/, "Name can only contain letters, spaces, hyphens, and apostrophes"),
+
+  email: z
+    .string()
+    .min(1, "Email is required")
+    .email("Enter a valid email address")
+    .max(254, "Email is too long")
+    .toLowerCase(),
+
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters")
+    .max(128, "Password must be at most 128 characters")
+    .regex(/[a-z]/, "Password must include a lowercase letter")
+    .regex(/[A-Z]/, "Password must include an uppercase letter")
+    .regex(/[0-9]/, "Password must include a number"),
+
+  confirmPassword: z.string().min(1, "Please confirm your password"),
+}).refine((data) => data.password === data.confirmPassword, {
+  path: ["confirmPassword"],
+  message: "Passwords do not match",
+});
+
+type FormData = z.infer<typeof schema>;
+
+/* -------------------------------------------------------------------------- */
+/*  Component                                                                   */
+/* -------------------------------------------------------------------------- */
 export default function RegisterPage() {
-  const [error, setError] = useState("");
-  const login = useAuthStore((state) => state.login);
+  const loginStore = useAuthStore((s) => s.login);
   const router = useRouter();
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    const email = formData.get("email") as string;
-    const password = formData.get("password") as string;
-    const name = formData.get("name") as string;
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<FormData>({ resolver: zodResolver(schema) });
 
+  const onSubmit = async (data: FormData) => {
     try {
-      if (process.env.NEXT_PUBLIC_USE_MOCK === "true" || true) {
-        login("mock-jwt-token", { id: "1", email, name, role: "CUSTOMER" });
-        router.push("/products");
+      if (process.env.NEXT_PUBLIC_USE_MOCK === "true") {
+        loginStore("mock-jwt-token", {
+          id: "1",
+          email: data.email,
+          name: data.name,
+          role: "customer",
+        });
+        toast.success("Account created!", { description: `Welcome, ${data.name}` });
+        router.push("/customer/products");
         return;
       }
-      
-      const res = await api.post("/auth/register", { email, password, name });
-      login(res.data.token, res.data.user);
-      router.push("/products");
-    } catch (err: any) {
-      setError(err.response?.data?.message || "Registration failed");
+
+      const res = await api.post("/auth/register", {
+        email: data.email,
+        password: data.password,
+        role: "customer", // Send customer role by default
+      });
+      toast.success("Account created!", { description: `Please sign in to continue.` });
+      router.push("/login");
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??
+        "Registration failed. Please try again.";
+      toast.error("Registration failed", { description: msg });
     }
   };
 
   return (
     <div className="flex h-screen w-full items-center justify-center bg-background p-4">
-      <div className="w-full max-w-md bg-panel p-8 rounded-md border border-border shadow-lg">
-        <h1 className="heading text-2xl font-bold text-success mb-2">Create Account</h1>
-        <p className="text-text-muted mb-6">Join OPS today</p>
+      <div className="w-full max-w-md bg-panel p-8 rounded-md border border-border">
+        <h1 className="heading text-2xl font-bold text-success mb-1">Create Account</h1>
+        <p className="text-text-muted text-sm mb-6">Join the Order Processing System</p>
 
-        {error && <div className="mb-4 p-3 bg-failed/10 text-failed rounded-md text-sm">{error}</div>}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-1 text-text-main">Name</label>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+          {/* Name */}
+          <Field label="Full Name" error={errors.name?.message}>
             <input
+              {...register("name")}
               type="text"
-              name="name"
-              required
-              className="w-full bg-background border border-border rounded-md px-3 py-2 text-text-main focus:outline-none focus:border-interactive focus:ring-1 focus:ring-interactive"
-              placeholder="John Doe"
+              autoComplete="name"
+              placeholder="Jane Doe"
+              className={inputClass(!!errors.name)}
             />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1 text-text-main">Email</label>
+          </Field>
+
+          {/* Email */}
+          <Field label="Email" error={errors.email?.message}>
             <input
+              {...register("email")}
               type="email"
-              name="email"
-              required
-              className="w-full bg-background border border-border rounded-md px-3 py-2 text-text-main focus:outline-none focus:border-interactive focus:ring-1 focus:ring-interactive"
-              placeholder="user@example.com"
+              autoComplete="email"
+              placeholder="jane@example.com"
+              className={inputClass(!!errors.email)}
             />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1 text-text-main">Password</label>
+          </Field>
+
+          {/* Password */}
+          <Field label="Password" error={errors.password?.message}>
             <input
+              {...register("password")}
               type="password"
-              name="password"
-              required
-              className="w-full bg-background border border-border rounded-md px-3 py-2 text-text-main focus:outline-none focus:border-interactive focus:ring-1 focus:ring-interactive"
+              autoComplete="new-password"
               placeholder="••••••••"
+              className={inputClass(!!errors.password)}
             />
-          </div>
+          </Field>
+
+          {/* Confirm Password */}
+          <Field label="Confirm Password" error={errors.confirmPassword?.message}>
+            <input
+              {...register("confirmPassword")}
+              type="password"
+              autoComplete="new-password"
+              placeholder="••••••••"
+              className={inputClass(!!errors.confirmPassword)}
+            />
+          </Field>
 
           <button
             type="submit"
-            className="w-full bg-interactive text-white py-2 px-4 rounded-md font-medium hover:bg-interactive/90 transition-colors"
+            disabled={isSubmitting}
+            className="w-full bg-interactive text-white py-2 px-4 rounded-md font-medium
+                       hover:bg-interactive/90 transition-colors
+                       focus:outline-none focus:ring-2 focus:ring-interactive focus:ring-offset-2 focus:ring-offset-panel
+                       disabled:opacity-50 disabled:cursor-not-allowed mt-2"
           >
-            Register
+            {isSubmitting ? "Creating account…" : "Register"}
           </button>
         </form>
 
-        <p className="mt-4 text-center text-sm text-text-muted">
+        <p className="mt-5 text-center text-sm text-text-muted">
           Already have an account?{" "}
-          <Link href="/login" className="text-interactive hover:underline">
+          <Link href="/login" className="text-interactive hover:underline focus:underline focus:outline-none">
             Sign In
           </Link>
         </p>
       </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Helpers                                                                     */
+/* -------------------------------------------------------------------------- */
+function inputClass(hasError: boolean) {
+  return [
+    "w-full bg-background border rounded-md px-3 py-2 text-text-main",
+    "placeholder:text-text-muted/50",
+    "focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-offset-panel transition-colors",
+    hasError
+      ? "border-failed focus:border-failed focus:ring-failed/40"
+      : "border-border focus:border-interactive focus:ring-interactive/40",
+  ].join(" ");
+}
+
+function Field({
+  label,
+  error,
+  children,
+}: {
+  label: string;
+  error?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <label className="block text-sm font-medium mb-1 text-text-main">{label}</label>
+      {children}
+      {error && (
+        <p role="alert" className="mt-1 text-xs text-failed">
+          {error}
+        </p>
+      )}
     </div>
   );
 }
