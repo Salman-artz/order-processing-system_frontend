@@ -35,17 +35,38 @@ export const SEED_PRODUCTS: MockProduct[] = [
   },
   {
     id: '13ab7375-c7b2-4e83-8cc0-dfd981ed74d7',
-    name: 'Headphone Sony WH-1000XM5',
+    name: 'Headphone Sony WH-1000XM5 Noise Cancelling',
     price: 4500000,
-    stock: 10,
+    stock: 20,
     description: 'Noise-cancelling, 30h battery',
+  },
+  {
+    id: '79e5bb66-f451-4960-b144-1dc6af9866f1',
+    name: 'Laptop ASUS VivoBook 15 Intel Core i5',
+    price: 8750000,
+    stock: 25,
+    description: 'Everyday laptop for work and study',
   },
   {
     id: '6e37486f-7ce2-41c1-9046-a8f2d943006f',
     name: 'Mechanical Keyboard Keychron K2 RGB',
     price: 1350000,
-    stock: 20,
+    stock: 40,
     description: 'Wireless, hot-swap, TKL layout',
+  },
+  {
+    id: 'cf217e3f-1cac-40f1-ae59-166e659c743a',
+    name: 'Monitor LG 24 inch IPS Full HD',
+    price: 2850000,
+    stock: 15,
+    description: '24-inch IPS monitor for work and entertainment',
+  },
+  {
+    id: 'eb824b0c-dca7-48b9-a72b-3448dd3627a2',
+    name: 'SSD External Samsung T7 1TB',
+    price: 1750000,
+    stock: 35,
+    description: 'Portable external SSD storage',
   },
   {
     id: '00000000-0000-0000-0000-000000000000',
@@ -63,7 +84,7 @@ export const SEED_ORDERS: MockOrder[] = [
     status: 'COMPLETED',
     totalAmount: 1350000,
     items: [{ productId: '6e37486f-7ce2-41c1-9046-a8f2d943006f', quantity: 1, price: 1350000 }],
-    createdAt: new Date(Date.now() - 3600000).toISOString(),
+    createdAt: '2026-08-26T10:00:00Z',
     sagaLogs: [
       { id: 'l1', orderId: 'ord-completed-101', eventType: 'ORDER_CREATE', status: 'SUCCESS', createdAt: new Date(Date.now() - 3590000).toISOString() },
       { id: 'l2', orderId: 'ord-completed-101', eventType: 'STOCK_RESERVE', status: 'SUCCESS', createdAt: new Date(Date.now() - 3580000).toISOString() },
@@ -76,7 +97,7 @@ export const SEED_ORDERS: MockOrder[] = [
     status: 'PENDING',
     totalAmount: 4500000,
     items: [{ productId: '13ab7375-c7b2-4e83-8cc0-dfd981ed74d7', quantity: 1, price: 4500000 }],
-    createdAt: new Date().toISOString(),
+    createdAt: '2026-08-26T11:00:00Z',
     sagaLogs: [
       { id: 'l4', orderId: 'ord-pending-102', eventType: 'ORDER_CREATE', status: 'SUCCESS', createdAt: new Date().toISOString() },
     ],
@@ -87,7 +108,7 @@ export const SEED_ORDERS: MockOrder[] = [
     status: 'CANCELLED',
     totalAmount: 28500000,
     items: [{ productId: '4120ce5d-ac77-45f1-bd50-c5bc5d2725ad', quantity: 1, price: 28500000 }],
-    createdAt: new Date(Date.now() - 7200000).toISOString(),
+    createdAt: '2026-08-26T12:00:00Z',
     sagaLogs: [
       { id: 'l5', orderId: 'ord-cancelled-103', eventType: 'ORDER_CREATE', status: 'SUCCESS', createdAt: new Date(Date.now() - 7190000).toISOString() },
       { id: 'l6', orderId: 'ord-cancelled-103', eventType: 'STOCK_RESERVE', status: 'SUCCESS', createdAt: new Date(Date.now() - 7180000).toISOString() },
@@ -125,7 +146,7 @@ export async function setupStandardApiMocks(page: Page, options?: {
     const lastSegment = segments[segments.length - 1];
 
     if (lastSegment === 'orders') {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(orders) });
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ orders, total: orders.length }) });
     } else {
       const orderId = lastSegment;
       const order = orders.find((o) => o.id === orderId) || {
@@ -148,7 +169,7 @@ export async function setupStandardApiMocks(page: Page, options?: {
       if (options?.throwOrdersError) {
         await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Internal Server Error' }) });
       } else {
-        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(orders) });
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ orders, total: orders.length }) });
       }
     } else if (lastSegment === 'orders' && method === 'POST') {
       const payload = route.request().postDataJSON();
