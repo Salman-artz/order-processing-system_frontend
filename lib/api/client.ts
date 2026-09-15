@@ -35,6 +35,10 @@ export const mockApi = {
     console.log(`Mock PUT ${url}`, data);
     return { data: {} };
   },
+  patch: async (url: string, data: any) => {
+    console.log(`Mock PATCH ${url}`, data);
+    return { data: {} };
+  },
   delete: async (url: string) => {
     console.log(`Mock DELETE ${url}`);
     return { data: {} };

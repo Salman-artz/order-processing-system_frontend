@@ -56,6 +56,7 @@ export default function ProductsPage() {
       // Backend returns { products: [], total: N }
       return res.data.products ?? res.data;
     },
+    retry: false,
     staleTime: 60_000,
   });
 
@@ -64,10 +65,11 @@ export default function ProductsPage() {
     handleSubmit,
     watch,
     setValue,
+    setError,
+    clearErrors,
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
     defaultValues: { product_id: "", quantity: 1 },
-    resolver: zodResolver(makeSchema(null)), // initial — updated via watch below
   });
 
   const selectedId  = watch("product_id");
@@ -76,10 +78,19 @@ export default function ProductsPage() {
   const total = (selectedProduct?.price ?? 0) * (selectedQty || 0);
 
   const onSubmit = async (data: FormData) => {
+    clearErrors();
     // Re-validate with product-specific max qty
     const result = makeSchema(selectedProduct).safeParse(data);
     if (!result.success) {
-      result.error.issues.forEach((e: { message: string }) => toast.error(e.message));
+      result.error.issues.forEach((e) => {
+        toast.error(e.message);
+        if (e.path.includes("quantity")) {
+          setError("quantity", { type: "manual", message: e.message });
+        }
+        if (e.path.includes("product_id")) {
+          setError("product_id", { type: "manual", message: e.message });
+        }
+      });
       return;
     }
 
@@ -121,7 +132,7 @@ export default function ProductsPage() {
   /* ---------------------------------------------------------------------- */
   if (isLoading) {
     return (
-      <div className="space-y-4 animate-pulse">
+      <div data-testid="products-loading" className="space-y-4 animate-pulse">
         <div className="h-8 bg-panel rounded w-48" />
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {Array.from({ length: 6 }).map((_, i) => (
@@ -134,7 +145,7 @@ export default function ProductsPage() {
 
   if (isError) {
     return (
-      <div className="bg-failed/10 border border-failed/30 rounded-md p-6 text-failed">
+      <div data-testid="products-error" className="bg-failed/10 border border-failed/30 rounded-md p-6 text-failed">
         Failed to load products. Make sure the backend is running or enable mock mode.
       </div>
     );
@@ -153,7 +164,7 @@ export default function ProductsPage() {
       </div>
 
       {/* Product Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div data-testid="products-grid" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {products.map((product) => {
           const isSelected = product.id === selectedId;
           const isOutOfStock = product.stock === 0;
@@ -161,6 +172,7 @@ export default function ProductsPage() {
           return (
             <button
               key={product.id}
+              data-testid={`product-card-${product.id}`}
               type="button"
               disabled={isOutOfStock}
               onClick={() => {
@@ -203,6 +215,8 @@ export default function ProductsPage() {
       {selectedProduct && (
         <form
           onSubmit={handleSubmit(onSubmit)}
+          noValidate
+          data-testid="order-form"
           className="bg-panel border border-border rounded-md p-6 space-y-5"
         >
           <h2 className="heading text-lg font-bold">Place Order</h2>
@@ -232,6 +246,7 @@ export default function ProductsPage() {
             </label>
             <input
               id="qty-input"
+              data-testid="input-quantity"
               type="number"
               min={1}
               max={selectedProduct.stock}
@@ -243,13 +258,13 @@ export default function ProductsPage() {
               ].join(" ")}
             />
             {errors.quantity && (
-              <p role="alert" className="mt-1 text-xs text-failed">{errors.quantity.message}</p>
+              <p role="alert" data-testid="error-quantity" className="mt-1 text-xs text-failed">{errors.quantity.message}</p>
             )}
           </div>
 
           {/* Total preview */}
           {selectedQty > 0 && !errors.quantity && (
-            <div className="flex items-center gap-3 text-sm">
+            <div data-testid="text-order-total" className="flex items-center gap-3 text-sm">
               <span className="text-text-muted">Order total:</span>
               <span className="tech-data text-success font-bold text-lg">
                 Rp {total.toLocaleString("id-ID")}
@@ -264,6 +279,7 @@ export default function ProductsPage() {
 
           <button
             type="submit"
+            data-testid="btn-confirm-order"
             disabled={isSubmitting || selectedProduct.stock === 0}
             className="bg-interactive text-white py-2 px-6 rounded-md font-medium
                        hover:bg-interactive/90 transition-colors
@@ -276,7 +292,7 @@ export default function ProductsPage() {
       )}
 
       {products.length === 0 && (
-        <div className="text-center py-16 text-text-muted">
+        <div data-testid="empty-products-state" className="text-center py-16 text-text-muted">
           <p className="heading text-lg">No products available</p>
           <p className="text-sm mt-1">Check back later or contact support.</p>
         </div>

@@ -22,19 +22,21 @@ export default function AdminOrdersPage() {
         ];
       }
       const res = await api.get("/admin/orders");
-      return res.data;
+      const list = res.data.orders ?? res.data;
+      return Array.isArray(list) ? list : [];
     },
   });
 
-  const filteredOrders = orders?.filter(o => filter === "ALL" ? true : o.status === filter);
+  const filteredOrders = Array.isArray(orders) ? orders.filter(o => filter === "ALL" ? true : o.status === filter) : [];
 
-  if (isLoading) return <div className="text-text-muted">Loading orders...</div>;
+  if (isLoading) return <div data-testid="admin-orders-loading" className="text-text-muted">Loading orders...</div>;
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="heading text-2xl font-bold">All Orders</h1>
         <select 
+          data-testid="select-status-filter"
           className="bg-panel border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-interactive"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
@@ -50,7 +52,7 @@ export default function AdminOrdersPage() {
 
       <div className="bg-panel rounded-md border border-border overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
+          <table data-testid="table-admin-orders" className="w-full text-left text-sm">
             <thead className="bg-border text-text-muted">
               <tr>
                 <th className="px-4 py-3 font-medium">Order ID</th>
@@ -60,24 +62,40 @@ export default function AdminOrdersPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {filteredOrders?.map((order) => (
-                <tr key={order.id} className="hover:bg-border/50 transition-colors">
-                  <td className="px-4 py-3">
-                    <Link href={`/admin/orders/${order.id}`} className="tech-data text-interactive hover:underline">
-                      {order.id}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 text-text-muted">
-                    {new Date(order.createdAt).toLocaleDateString()}
-                  </td>
-                  <td className="px-4 py-3 tech-data font-bold">
-                    ${order.totalAmount}
-                  </td>
-                  <td className="px-4 py-3">
-                    <SagaTimeline status={order.status} compact />
+              {filteredOrders?.map((order) => {
+                const amt = Number(order.totalAmount ?? order.total_amount ?? 0);
+                const rawDate = order.createdAt || order.created_at;
+                let dateDisplay = "–";
+                if (rawDate) {
+                  const d = new Date(rawDate);
+                  if (!isNaN(d.getTime())) dateDisplay = d.toLocaleDateString();
+                }
+                return (
+                  <tr key={order.id} data-testid={`admin-order-row-${order.id}`} className="hover:bg-border/50 transition-colors">
+                    <td className="px-4 py-3">
+                      <Link href={`/admin/orders/${order.id}`} className="tech-data text-interactive hover:underline">
+                        {order.id}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-text-muted">
+                      {dateDisplay}
+                    </td>
+                    <td className="px-4 py-3 tech-data font-bold">
+                      Rp {amt.toLocaleString("id-ID")}
+                    </td>
+                    <td className="px-4 py-3">
+                      <SagaTimeline status={order.status} compact />
+                    </td>
+                  </tr>
+                );
+              })}
+              {(!filteredOrders || filteredOrders.length === 0) && (
+                <tr>
+                  <td colSpan={4} data-testid="empty-admin-orders-state" className="px-4 py-8 text-center text-text-muted">
+                    No orders found.
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>

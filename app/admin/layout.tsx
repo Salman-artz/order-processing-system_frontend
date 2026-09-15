@@ -3,24 +3,31 @@
 import Sidebar from "@/components/Sidebar";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { user } = useAuthStore();
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    if (!user) {
-      router.push("/login");
-    } else if (user.role !== "ADMIN") {
-      router.push("/products");
-    }
-  }, [user, router]);
+    setMounted(true);
+  }, []);
 
-  if (!user || user.role !== "ADMIN") return null;
+  useEffect(() => {
+    if (mounted) {
+      if (!user) {
+        router.push("/login");
+      } else if (user.role !== "ADMIN") {
+        router.push("/customer/products");
+      }
+    }
+  }, [mounted, user, router]);
+
+  if (!mounted || !user || user.role !== "ADMIN") return null;
 
   return (
-    <div className="flex h-screen w-full overflow-hidden">
+    <div data-testid="admin-layout" className="flex h-screen w-full overflow-hidden">
       <Sidebar />
       <main className="flex-1 overflow-y-auto bg-background p-6">
         {children}

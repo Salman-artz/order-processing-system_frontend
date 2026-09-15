@@ -61,10 +61,33 @@ export default function OrderDetailsPage() {
         return { ...MOCK_ORDER, id };
       }
       const res = await api.get(`/orders/${id}`);
-      return res.data;
+      return res.data.order ?? res.data;
     },
-    staleTime: 30_000,
+    refetchInterval: (query) => {
+      const current = query.state.data?.status;
+      if (current === "COMPLETED" || current === "CANCELLED") {
+        return false;
+      }
+      return 1000;
+    },
+    staleTime: 5_000,
   });
+
+  const { data: products = [] } = useQuery<Array<{ id: string; name: string }>>({
+    queryKey: ["products"],
+    queryFn: async () => {
+      const res = await api.get("/products");
+      const list = res.data.products ?? res.data;
+      return Array.isArray(list) ? list : [];
+    },
+    staleTime: 60_000,
+  });
+
+  const getProductName = (prodId?: string) => {
+    if (!prodId) return "Unknown Product";
+    const found = products.find((p) => p.id === prodId);
+    return found ? found.name : prodId;
+  };
 
   /* ---------------------------------------------------------------------- */
   /*  Status change handler (shared by WS and mock timer)                    */
@@ -138,7 +161,7 @@ export default function OrderDetailsPage() {
   /* ---------------------------------------------------------------------- */
   if (isLoading || !order) {
     return (
-      <div className="space-y-4 animate-pulse">
+      <div data-testid="order-details-loading" className="space-y-4 animate-pulse">
         <div className="h-8 bg-panel rounded-md w-1/3" />
         <div className="h-48 bg-panel rounded-md" />
         <div className="h-32 bg-panel rounded-md" />
@@ -152,15 +175,20 @@ export default function OrderDetailsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="heading text-2xl font-bold">Order Details</h1>
-          <p className="tech-data text-text-muted text-sm mt-1 break-all">{order.id}</p>
+          <p data-testid="order-details-id" className="tech-data text-text-muted text-sm mt-1 break-all">{order.id}</p>
         </div>
         <div className="text-xs text-text-muted">
-          {formatDistanceToNow(new Date(order.createdAt), { addSuffix: true })}
+          {(() => {
+            const rawDate = order.createdAt || order.created_at;
+            if (!rawDate) return "–";
+            const d = new Date(rawDate);
+            return isNaN(d.getTime()) ? "–" : formatDistanceToNow(d, { addSuffix: true });
+          })()}
         </div>
       </div>
 
       {/* Saga Timeline with animated status transitions */}
-      <div className="bg-panel border border-border rounded-md p-6">
+      <div data-testid="saga-progress-section" className="bg-panel border border-border rounded-md p-6">
         <h2 className="heading text-base font-semibold text-text-muted mb-8 uppercase tracking-wider text-xs">
           Saga Progress
         </h2>
@@ -185,33 +213,103 @@ export default function OrderDetailsPage() {
       </div>
 
       {/* Order Items */}
-      <div className="bg-panel border border-border rounded-md p-6">
+      <div data-testid="order-details-items" className="bg-panel border border-border rounded-md p-6">
         <h2 className="heading text-base font-semibold mb-4">Items</h2>
         <div className="space-y-3">
-          {order.items.map((item, i) => (
-            <div
-              key={i}
-              className="flex justify-between items-center bg-background p-3 rounded-md border border-border"
-            >
-              <div>
-                <span className="tech-data text-xs text-text-muted">Product</span>
-                <p className="font-medium tech-data text-sm mt-0.5">{item.productId}</p>
+          {(order.items ?? []).map((item, i) => {
+            const prodId = item.productId || item.product_id;
+            return (
+              <div
+                key={i}
+                data-testid={`order-item-row-${i}`}
+                className="flex justify-between items-center bg-background p-3 rounded-md border border-border"
+              >
+                <div>
+                  <p className="font-medium text-sm text-text-main">{getProductName(prodId)}</p>
+                  <p className="tech-data text-xs text-text-muted mt-0.5">{prodId}</p>
+                </div>
+                <div className="flex items-center gap-4 text-sm">
+                  <span className="text-text-muted">×{item.quantity}</span>
+                  <span className="tech-data font-bold text-success">
+                    Rp {((item.price ?? 0) * (item.quantity ?? 1)).toLocaleString("id-ID")}
+                  </span>
+                </div>
               </div>
-              <div className="flex items-center gap-4 text-sm">
-                <span className="text-text-muted">×{item.quantity}</span>
-                <span className="tech-data font-bold text-success">
-                  Rp {(item.price * item.quantity).toLocaleString("id-ID")}
-                </span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
+          {(!order.items || order.items.length === 0) && (
+            <p className="text-xs text-text-muted">No individual item details.</p>
+          )}
         </div>
         <div className="flex justify-between items-center mt-6 pt-4 border-t border-border">
           <span className="font-bold">Total</span>
-          <span className="tech-data text-success text-xl font-bold">
-            Rp {order.totalAmount.toLocaleString("id-ID")}
+          <span data-testid="order-details-total" className="tech-data text-success text-xl font-bold">
+            Rp {Number(order.totalAmount ?? order.total_amount ?? 0).toLocaleString("id-ID")}
           </span>
         </div>
+      </div>
+
+      {/* Midtrans Payment Gateway Section */}
+      <div data-testid="midtrans-gateway-section" className="bg-panel border border-border rounded-md p-6 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h2 className="heading text-base font-semibold">Payment Gateway (Midtrans Snap)</h2>
+            <p className="text-xs text-text-muted mt-0.5">Channels: QRIS, GoPay, BCA/Mandiri/BNI Virtual Account, Credit Card</p>
+          </div>
+          <span className="tech-data text-xs px-2.5 py-1 rounded bg-interactive/10 text-interactive border border-interactive/30">
+            Midtrans Gateway
+          </span>
+        </div>
+
+        {displayStatus === "COMPLETED" ? (
+          <div data-testid="midtrans-status-paid" className="bg-success/10 border border-success/30 rounded p-4 text-xs text-success flex items-center gap-2">
+            <span>✅</span>
+            <span>Pembayaran lunas terverifikasi oleh Midtrans webhook settlement.</span>
+          </div>
+        ) : displayStatus === "CANCELLED" ? (
+          <div data-testid="midtrans-status-failed" className="bg-failed/10 border border-failed/30 rounded p-4 text-xs text-failed flex items-center gap-2">
+            <span>❌</span>
+            <span>Transaksi dibatalkan / ditolak oleh Midtrans payment gateway.</span>
+          </div>
+        ) : (
+          <div className="bg-background border border-border rounded p-4 space-y-3">
+            <p className="text-xs text-text-muted">
+              Silakan selesaikan pembayaran pesanan Anda melalui Midtrans Snap.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                data-testid="btn-midtrans-pay"
+                onClick={async () => {
+                  try {
+                    await api.post("/payments/midtrans/simulate", { order_id: id, status: "settlement" });
+                    toast.success("Midtrans payment successful!");
+                  } catch {
+                    toast.error("Gagal memproses simulasi Midtrans");
+                  }
+                }}
+                className="bg-interactive text-white text-xs px-4 py-2 rounded font-medium hover:bg-interactive/90 transition-colors"
+              >
+                💳 Pay with Midtrans (Simulate Settlement)
+              </button>
+              <button
+                type="button"
+                data-testid="btn-midtrans-cancel"
+                onClick={async () => {
+                  try {
+                    await api.post("/payments/midtrans/simulate", { order_id: id, status: "deny" });
+                    toast.info("Midtrans payment cancelled / denied.");
+                  } catch {
+                    toast.error("Gagal memproses simulasi");
+                  }
+                }}
+                className="bg-panel border border-failed/40 text-failed text-xs px-4 py-2 rounded font-medium hover:bg-failed/10 transition-colors"
+              >
+                ✕ Cancel Payment
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -232,6 +330,7 @@ function StatusBadge({ status }: { status: OrderStatus }) {
   return (
     <motion.span
       key={status}
+      data-testid="status-badge"
       initial={{ scale: 0.9, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
       transition={{ duration: 0.25 }}

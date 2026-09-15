@@ -77,9 +77,25 @@ export function useOrderSocket({
 
     ws.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data) as OrderStatusUpdate;
-        if (data.status) {
-          onStatusChangeRef.current(data);
+        const data = JSON.parse(event.data);
+        const validStatuses: OrderStatus[] = ["PENDING", "RESERVED", "PAID", "COMPLETED", "CANCELLED"];
+
+        let status: OrderStatus | undefined = data.status;
+        if (!status && data.event) {
+          const ev = String(data.event).toUpperCase();
+          if (ev.includes("COMPLETED")) status = "COMPLETED";
+          else if (ev.includes("CANCEL") || ev.includes("FAIL") || ev.includes("REJECT")) status = "CANCELLED";
+          else if (ev.includes("PAID") || ev === "PAYMENT_SUCCESS") status = "PAID";
+          else if (ev.includes("RESERVED") || ev === "PAYMENT_REQUESTED") status = "RESERVED";
+          else if (ev.includes("CREATED") || ev.includes("PENDING")) status = "PENDING";
+        }
+
+        if (status && validStatuses.includes(status)) {
+          onStatusChangeRef.current({
+            order_id: data.order_id || orderId,
+            status,
+            event_type: data.event || data.event_type,
+          });
         }
       } catch {
         // Ignore malformed frames

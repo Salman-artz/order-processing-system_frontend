@@ -92,10 +92,11 @@ export default function RegisterPage() {
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
           {/* Name */}
-          <Field label="Full Name" error={errors.name?.message}>
+          <Field label="Full Name" error={errors.name?.message} testId="error-name">
             <input
               {...register("name")}
               type="text"
+              data-testid="input-name"
               autoComplete="name"
               placeholder="Jane Doe"
               className={inputClass(!!errors.name)}
@@ -103,10 +104,11 @@ export default function RegisterPage() {
           </Field>
 
           {/* Email */}
-          <Field label="Email" error={errors.email?.message}>
+          <Field label="Email" error={errors.email?.message} testId="error-email">
             <input
               {...register("email")}
               type="email"
+              data-testid="input-email"
               autoComplete="email"
               placeholder="jane@example.com"
               className={inputClass(!!errors.email)}
@@ -114,10 +116,11 @@ export default function RegisterPage() {
           </Field>
 
           {/* Password */}
-          <Field label="Password" error={errors.password?.message}>
+          <Field label="Password" error={errors.password?.message} testId="error-password">
             <input
               {...register("password")}
               type="password"
+              data-testid="input-password"
               autoComplete="new-password"
               placeholder="••••••••"
               className={inputClass(!!errors.password)}
@@ -125,10 +128,11 @@ export default function RegisterPage() {
           </Field>
 
           {/* Confirm Password */}
-          <Field label="Confirm Password" error={errors.confirmPassword?.message}>
+          <Field label="Confirm Password" error={errors.confirmPassword?.message} testId="error-confirm-password">
             <input
               {...register("confirmPassword")}
               type="password"
+              data-testid="input-confirm-password"
               autoComplete="new-password"
               placeholder="••••••••"
               className={inputClass(!!errors.confirmPassword)}
@@ -137,6 +141,7 @@ export default function RegisterPage() {
 
           <button
             type="submit"
+            data-testid="btn-submit"
             disabled={isSubmitting}
             className="w-full bg-interactive text-white py-2 px-4 rounded-md font-medium
                        hover:bg-interactive/90 transition-colors
@@ -149,7 +154,7 @@ export default function RegisterPage() {
 
         <p className="mt-5 text-center text-sm text-text-muted">
           Already have an account?{" "}
-          <Link href="/login" className="text-interactive hover:underline focus:underline focus:outline-none">
+          <Link href="/login" data-testid="link-login" className="text-interactive hover:underline focus:underline focus:outline-none">
             Sign In
           </Link>
         </p>
@@ -175,10 +180,12 @@ function inputClass(hasError: boolean) {
 function Field({
   label,
   error,
+  testId,
   children,
 }: {
   label: string;
   error?: string;
+  testId?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -186,7 +193,7 @@ function Field({
       <label className="block text-sm font-medium mb-1 text-text-main">{label}</label>
       {children}
       {error && (
-        <p role="alert" className="mt-1 text-xs text-failed">
+        <p role="alert" data-testid={testId} className="mt-1 text-xs text-failed">
           {error}
         </p>
       )}

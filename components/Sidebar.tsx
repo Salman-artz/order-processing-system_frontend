@@ -18,27 +18,30 @@ export default function Sidebar() {
 
   const adminLinks = [
     { name: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
+    { name: "Inventory", href: "/admin/inventory", icon: Package },
     { name: "All Orders", href: "/admin/orders", icon: FileText },
   ];
 
   const links = isAdmin ? adminLinks : customerLinks;
 
   return (
-    <div className="w-64 h-full bg-panel border-r border-border flex flex-col shrink-0">
+    <div data-testid="sidebar" className="w-64 h-full bg-panel border-r border-border flex flex-col shrink-0">
       <div className="p-6 border-b border-border">
         <h1 className="heading text-xl font-bold text-success">OPS</h1>
-        <p className="text-sm text-text-muted mt-1">{user?.email}</p>
+        <p data-testid="user-email" className="text-sm text-text-muted mt-1">{user?.email}</p>
       </div>
       
       <nav className="flex-1 p-4 space-y-2">
         {links.map((link) => {
           const Icon = link.icon;
           const isActive = pathname.startsWith(link.href);
+          const testId = `nav-link-${link.name.toLowerCase().replace(/\s+/g, '-')}`;
           
           return (
             <Link
               key={link.href}
               href={link.href}
+              data-testid={testId}
               className={clsx(
                 "flex items-center gap-3 px-4 py-3 rounded-md transition-colors",
                 isActive 
@@ -55,9 +58,13 @@ export default function Sidebar() {
 
       <div className="p-4 border-t border-border">
         <button
+          data-testid="btn-logout"
           onClick={() => {
             logout();
-            window.location.href = "/login";
+            if (typeof window !== 'undefined') {
+              sessionStorage.setItem('logged_out', 'true');
+              window.location.href = "/login";
+            }
           }}
           className="flex items-center gap-3 px-4 py-3 w-full text-left text-failed hover:bg-failed/10 rounded-md transition-colors"
         >

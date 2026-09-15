@@ -46,9 +46,17 @@ const PIE_COLORS: Record<string, string> = {
 function groupByDay(orders: Order[]) {
   const map: Record<string, { day: string; revenue: number; count: number }> = {};
   for (const o of orders) {
-    const day = new Date(o.createdAt).toLocaleDateString("en", { weekday: "short", day: "numeric" });
+    const rawDate = o.createdAt || o.created_at;
+    let day = "Recent";
+    if (rawDate) {
+      const d = new Date(rawDate);
+      if (!isNaN(d.getTime())) {
+        day = d.toLocaleDateString("en", { weekday: "short", day: "numeric" });
+      }
+    }
     if (!map[day]) map[day] = { day, revenue: 0, count: 0 };
-    if (o.status === "COMPLETED") map[day].revenue += o.totalAmount;
+    const amt = Number(o.totalAmount ?? o.total_amount ?? 0);
+    if (o.status === "COMPLETED") map[day].revenue += amt;
     map[day].count += 1;
   }
   return Object.values(map);
@@ -87,7 +95,7 @@ export default function AdminDashboardPage() {
 
   const completed  = orders.filter((o) => o.status === "COMPLETED");
   const pending    = orders.filter((o) => o.status === "PENDING" || o.status === "RESERVED");
-  const revenue    = completed.reduce((sum, o) => sum + o.totalAmount, 0);
+  const revenue    = completed.reduce((sum, o) => sum + Number(o.totalAmount ?? o.total_amount ?? 0), 0);
   const successRate = calcSuccessRate(orders);
 
   const byDay    = groupByDay(orders);
@@ -98,7 +106,7 @@ export default function AdminDashboardPage() {
     : "–";
 
   return (
-    <div className="space-y-8">
+    <div data-testid="admin-dashboard" className="space-y-8">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <h1 className="heading text-2xl font-bold">Dashboard</h1>
@@ -110,10 +118,11 @@ export default function AdminDashboardPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard label="Total Orders"   value={orders.length.toString()}    color="text-interactive" />
-        <KpiCard label="Revenue (COMPLETED)" value={`Rp ${(revenue / 1_000_000).toFixed(1)}M`} color="text-success" />
-        <KpiCard label="Pending / In-flight" value={pending.length.toString()}  color="text-pending" />
+        <KpiCard testId="metric-total-orders" label="Total Orders"   value={orders.length.toString()}    color="text-interactive" />
+        <KpiCard testId="metric-revenue" label="Revenue (COMPLETED)" value={`Rp ${(revenue / 1_000_000).toFixed(1)}M`} color="text-success" />
+        <KpiCard testId="metric-pending-orders" label="Pending / In-flight" value={pending.length.toString()}  color="text-pending" />
         <KpiCard
+          testId="metric-success-rate"
           label="Payment Success Rate"
           value={successRate ? `${successRate}%` : "–"}
           color={successRate && parseFloat(successRate) >= 70 ? "text-success" : "text-failed"}
@@ -123,7 +132,7 @@ export default function AdminDashboardPage() {
       {/* Charts row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Bar chart: daily revenue + order count */}
-        <div className="lg:col-span-2 bg-panel border border-border p-6 rounded-md">
+        <div data-testid="chart-revenue-container" className="lg:col-span-2 bg-panel border border-border p-6 rounded-md">
           <h3 className="heading text-sm font-semibold text-text-muted uppercase tracking-wider mb-6">
             Revenue & Orders by Day
           </h3>
@@ -144,7 +153,7 @@ export default function AdminDashboardPage() {
         </div>
 
         {/* Pie chart: status distribution */}
-        <div className="bg-panel border border-border p-6 rounded-md">
+        <div data-testid="chart-status-container" className="bg-panel border border-border p-6 rounded-md">
           <h3 className="heading text-sm font-semibold text-text-muted uppercase tracking-wider mb-6">
             Order Status Mix
           </h3>
@@ -181,7 +190,7 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* Recent Orders table */}
-      <div className="bg-panel border border-border rounded-md">
+      <div data-testid="table-recent-orders" className="bg-panel border border-border rounded-md">
         <div className="px-6 py-4 border-b border-border">
           <h3 className="heading text-sm font-semibold">Recent Orders</h3>
         </div>
@@ -196,22 +205,31 @@ export default function AdminDashboardPage() {
               </tr>
             </thead>
             <tbody>
-              {orders.slice(0, 10).map((order) => (
-                <tr key={order.id} className="border-b border-border/50 last:border-0 hover:bg-background/50 transition-colors">
-                  <td className="px-6 py-3">
-                    <span className="tech-data text-xs text-text-muted">{order.id.slice(0, 16)}…</span>
-                  </td>
-                  <td className="px-6 py-3">
-                    <StatusPill status={order.status} />
-                  </td>
-                  <td className="px-6 py-3 text-right tech-data text-sm">
-                    Rp {order.totalAmount.toLocaleString("id-ID")}
-                  </td>
-                  <td className="px-6 py-3 text-right tech-data text-xs text-text-muted">
-                    {new Date(order.createdAt).toLocaleDateString()}
-                  </td>
-                </tr>
-              ))}
+              {orders.slice(0, 10).map((order) => {
+                const amt = Number(order.totalAmount ?? order.total_amount ?? 0);
+                const rawDate = order.createdAt || order.created_at;
+                let dateDisplay = "–";
+                if (rawDate) {
+                  const d = new Date(rawDate);
+                  if (!isNaN(d.getTime())) dateDisplay = d.toLocaleDateString();
+                }
+                return (
+                  <tr key={order.id} data-testid={`recent-order-row-${order.id}`} className="border-b border-border/50 last:border-0 hover:bg-background/50 transition-colors">
+                    <td className="px-6 py-3">
+                      <span className="tech-data text-interactive">{order.id}</span>
+                    </td>
+                    <td className="px-6 py-3">
+                      <StatusPill status={order.status} />
+                    </td>
+                    <td className="px-6 py-3 text-right tech-data font-bold">
+                      Rp {amt.toLocaleString("id-ID")}
+                    </td>
+                    <td className="px-6 py-3 text-right text-text-muted text-xs">
+                      {dateDisplay}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -223,9 +241,9 @@ export default function AdminDashboardPage() {
 /* -------------------------------------------------------------------------- */
 /*  Sub-components                                                              */
 /* -------------------------------------------------------------------------- */
-function KpiCard({ label, value, color }: { label: string; value: string; color: string }) {
+function KpiCard({ testId, label, value, color }: { testId?: string; label: string; value: string; color: string }) {
   return (
-    <div className="bg-panel border border-border rounded-md p-5">
+    <div data-testid={testId} className="bg-panel border border-border rounded-md p-5">
       <p className="text-text-muted text-xs font-medium mb-2">{label}</p>
       <p className={`tech-data text-2xl font-bold ${color}`}>{value}</p>
     </div>

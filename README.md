@@ -1,84 +1,91 @@
 # Order Processing System - Frontend
 
-Web application Next.js untuk customer dan admin pada Order Processing System. Frontend terhubung ke Order Service melalui REST API dan menampilkan perubahan status order secara real-time melalui WebSocket.
+Web application modern Next.js untuk **Customer** dan **Admin** pada Order Processing System. Frontend terhubung ke Order Service (API Gateway) melalui REST API, terintegrasi dengan Payment Gateway Midtrans, dan menampilkan update status pemrosesan Saga secara real-time melalui WebSocket.
 
 Backend terkait: [order-processing-system_backend](https://github.com/Salman-artz/order-processing-system_backend).
 
-## Status Project
+---
 
-Fitur yang tersedia saat ini:
+## Status & Fitur Utama
 
-- Login dan register customer.
-- Katalog produk dan pembuatan order.
-- Riwayat serta detail order customer.
-- Dashboard admin dengan ringkasan order.
-- Daftar order admin dan detail order.
-- Visualisasi tahapan Saga melalui `SagaTimeline`.
-- Update status order real-time menggunakan WebSocket dengan reconnect otomatis.
-- Mock mode untuk development tanpa backend penuh.
-- Dockerfile multi-stage dan Docker Compose frontend.
+- **Customer Portal**:
+  - Register dan Login dengan JWT stateless authentication.
+  - Katalog produk interaktif dengan ketersediaan stok live.
+  - Pembuatan pesanan (Checkout).
+  - Riwayat pesanan & detail pesanan lengkap dengan resolusi nama produk.
+  - **Integrasi Payment Gateway Midtrans Snap**: Pembayaran via QRIS, GoPay, BCA/Mandiri Virtual Account, & Kartu Kredit.
+  - **Saga Status Timeline**: Visualisasi interaktif stepper status (`PENDING` $\rightarrow$ `RESERVED` $\rightarrow$ `AWAITING_PAYMENT` $\rightarrow$ `COMPLETED` / `CANCELLED`).
+  - Update realtime via WebSocket tanpa perlu refresh halaman.
+
+- **Admin Portal**:
+  - **Dashboard & Analitik**: KPI Ringkasan revenue, total pesanan, dan grafik performa order.
+  - **Inventory & Stock Management (`/admin/inventory`)**:
+    - Tambah produk baru (*Create SKU*).
+    - Edit nama dan harga barang.
+    - **Fitur Restock Stok**: Tambah stok unit cepat (+5, +10, +25, +50) atau input kustom.
+    - Hapus produk dari katalog (*Delete*).
+    - Metrik live: Total SKUs, Available Stock, **Locked / Reserved Stock (Terkunci Saga)**, dan Low-Stock alert.
+  - **Monitoring Seluruh Pesanan (`/admin/orders`)**: Audit trail log eksekusi Saga per transaksi.
+
+- **Pengujian Kualitas & E2E Testing**:
+  - Playwright End-to-End Test Suite dengan **34 test cases (100% Passing)** mencakup Auth, Catalog, Checkout, Saga Rollback, Midtrans Payment Settlement/Denial, dan Admin Inventory CRUD.
+
+---
 
 ## Tech Stack
 
-| Area | Teknologi |
-|---|---|
-| Framework | Next.js 16 App Router |
-| Bahasa | TypeScript |
-| Styling | Tailwind CSS v4 |
-| HTTP | Axios |
-| Data fetching | TanStack Query |
-| State | Zustand |
-| Form | React Hook Form + Zod |
-| Real-time | Native WebSocket |
-| UI feedback | Sonner |
-| Chart | Recharts |
-| Animation | Framer Motion |
+| Area | Teknologi | Keterangan |
+|---|---|---|
+| **Framework** | Next.js 16 (App Router) | React Server & Client Components |
+| **Bahasa** | TypeScript | Strict type safety |
+| **Styling** | Tailwind CSS v4 & Lucide Icons | Modern, clean, and responsive UI |
+| **HTTP Client** | Axios | Request interceptor & JWT token injection |
+| **State & Fetching** | TanStack Query v5 & Zustand | Client caching & reactive state |
+| **Form Validation** | React Hook Form + Zod | Schema-based client validation |
+| **Real-time Push** | Native WebSockets | Live Saga progression broadcast |
+| **Notification** | Sonner | Interactive toast alerts |
+| **E2E Testing** | Playwright Test | Automated cross-browser tests |
+| **Containerization** | Docker (Multi-stage) & Compose | Optimized standalone production build |
 
-## Prasyarat
-
-- Node.js 20 atau lebih baru
-- npm
-- Backend Order Service jika menjalankan mode API nyata
+---
 
 ## Menjalankan Local Development
 
 ```bash
+# 1. Install dependencies
 npm install
+
+# 2. Salin file konfigurasi environment
 Copy-Item .env.local.example .env.local
+
+# 3. Jalankan development server
 npm run dev
 ```
 
 Buka [http://localhost:3000](http://localhost:3000).
 
-Untuk backend yang dijalankan dari repository backend pada port default:
-
+Konfigurasi `.env.local` default:
 ```env
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8080/api/v1
 NEXT_PUBLIC_WS_URL=ws://localhost:8083/ws
 NEXT_PUBLIC_USE_MOCK=false
 ```
 
-Jalankan pemeriksaan kode:
+---
+
+## Menjalankan End-to-End (E2E) Test
+
+Project ini dilengkapi dengan test suite Playwright yang komprehensif:
 
 ```bash
-npm run lint
-npm run build
+# Menjalankan seluruh 34 E2E test cases
+npm run test:e2e
+
+# Menjalankan dengan mode UI interaktif
+npx playwright test --ui
 ```
 
-## Mode Mock
-
-Jika backend belum tersedia, aktifkan mock mode:
-
-```env
-NEXT_PUBLIC_USE_MOCK=true
-```
-
-Mode ini mencegah request API nyata, tetapi data yang ditampilkan bergantung pada implementasi halaman. Untuk alur order end-to-end, gunakan backend Order Service.
-
-Demo credential pada mock mode:
-
-- Customer: email apa pun dan password minimal 8 karakter.
-- Admin: email mengandung `admin` dan password minimal 8 karakter.
+---
 
 ## Menjalankan dengan Docker
 
@@ -87,82 +94,37 @@ Copy-Item .env.docker.example .env.docker
 docker compose --env-file .env.docker up -d --build
 ```
 
-Buka [http://localhost:3000](http://localhost:3000), atau port yang ditentukan oleh `FRONTEND_PORT`.
-
 Melihat log dan menghentikan container:
-
 ```bash
 docker compose logs -f frontend
 docker compose down
 ```
 
-Catatan: variable `NEXT_PUBLIC_*` disisipkan ke bundle saat `next build`. Setelah mengubah nilainya, image harus di-build ulang.
+---
 
-## Environment Variables
-
-| Variable | Fungsi | Contoh |
-|---|---|---|
-| `NEXT_PUBLIC_API_BASE_URL` | Base URL REST Order Service | `http://localhost:8080/api/v1` |
-| `NEXT_PUBLIC_WS_URL` | Base URL WebSocket Notification Service | `ws://localhost:8083/ws` |
-| `NEXT_PUBLIC_USE_MOCK` | Mengaktifkan mock API | `false` |
-| `FRONTEND_PORT` | Port host saat Docker | `3000` |
-
-Gunakan `.env.local.example` untuk local development dan `.env.docker.example` untuk Docker. File environment lokal tidak boleh di-commit.
-
-## Struktur Project
+## Struktur Direktori
 
 ```text
 app/
-  (auth)/login/           # Login
-  (auth)/register/        # Register
-  admin/dashboard/        # Dashboard admin
-  admin/orders/           # Daftar dan detail order admin
-  customer/products/      # Katalog dan pembuatan order
-  customer/orders/        # Riwayat dan detail order customer
+  (auth)/login/           # Halaman Login Customer & Admin
+  (auth)/register/        # Halaman Registrasi Customer
+  admin/dashboard/        # KPI Metrik & Analitik Admin
+  admin/inventory/        # Manajemen Produk & Restock Stok Admin
+  admin/orders/           # Daftar & Detail Monitoring Pesanan Admin
+  customer/products/      # Katalog Produk & Checkout Pesanan
+  customer/orders/        # Riwayat & Detail Pesanan (Midtrans Snap Payment)
 components/
-  SagaTimeline.tsx        # Visualisasi status Saga
-  Sidebar.tsx             # Navigasi aplikasi
+  SagaTimeline.tsx        # Komponen visualisasi stepper Saga
+  Sidebar.tsx             # Navigasi sidebar dinamis sesuai Role
 lib/
-  api/client.ts           # Axios client dan auth interceptor
-  hooks/useOrderSocket.ts # WebSocket order update
+  api/client.ts           # Axios instance & token interceptor
+  hooks/useOrderSocket.ts # WebSocket listener hook untuk real-time update
   store/useAuthStore.ts   # State autentikasi Zustand
-types/
-  index.ts                # TypeScript types
-Dockerfile                # Multi-stage production image
-docker-compose.yml        # Frontend container
+e2e/
+  auth.spec.ts            # E2E Test Autentikasi & RBAC
+  customer-products.spec.ts # E2E Test Katalog & Checkout
+  saga-flow.spec.ts       # E2E Test Saga Lifecycle & Midtrans Gateway
+  admin-dashboard.spec.ts # E2E Test Analitik Dashboard
+  admin-orders.spec.ts    # E2E Test Monitoring Pesanan
+  admin-inventory.spec.ts # E2E Test Admin CRUD & Restock Stok
 ```
-
-## Alur Pengguna
-
-### Customer
-
-1. Login atau register.
-2. Membuka katalog produk.
-3. Memilih produk dan membuat order.
-4. Melihat status order serta timeline Saga.
-5. Menerima update status melalui WebSocket.
-
-### Admin
-
-1. Login menggunakan akun admin.
-2. Melihat dashboard ringkasan.
-3. Membuka daftar order.
-4. Melihat detail dan timeline proses order.
-
-## Troubleshooting
-
-### API connection refused
-
-- Pastikan backend berjalan dan port Order Service benar-benar `8080`.
-- Pastikan `NEXT_PUBLIC_API_BASE_URL` memakai suffix `/api/v1`.
-- Pastikan backend mengizinkan origin frontend melalui CORS.
-
-### WebSocket tidak menerima update
-
-- Pastikan Notification Service berjalan pada port `8083`.
-- Pastikan `NEXT_PUBLIC_WS_URL` menunjuk ke endpoint WebSocket, bukan REST API.
-- Untuk Docker, pastikan port WebSocket di-expose ke host.
-
-### Perubahan environment tidak terlihat
-
-Restart dev server atau rebuild Docker image karena variable `NEXT_PUBLIC_*` diproses saat build.

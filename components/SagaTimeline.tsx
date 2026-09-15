@@ -43,7 +43,7 @@ export default function SagaTimeline({ status, compact = false }: SagaTimelinePr
   }
 
   return (
-    <div className="w-full">
+    <div data-testid="saga-timeline" className="w-full">
       <div className="relative flex items-start justify-between">
         {/* Track line behind nodes */}
         <div className="absolute top-4 left-0 right-0 h-[2px] bg-border mx-[16px]" />
@@ -55,7 +55,7 @@ export default function SagaTimeline({ status, compact = false }: SagaTimelinePr
           const isFinalFail  = isCancelled && index === activeIndex + 1; // first unreached → show X
 
           return (
-            <div key={step.id} className="relative z-10 flex flex-col items-center gap-2 flex-1">
+            <div key={step.id} data-testid={`saga-step-${step.id.toLowerCase()}`} className="relative z-10 flex flex-col items-center gap-2 flex-1">
               {/* Node */}
               <Node
                 isCompleted={isCompleted}
@@ -100,6 +100,7 @@ export default function SagaTimeline({ status, compact = false }: SagaTimelinePr
       {/* Cancelled banner */}
       {isCancelled && (
         <motion.div
+          data-testid="saga-cancelled-banner"
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           className="mt-6 flex items-center gap-2 text-failed text-sm font-medium bg-failed/10 border border-failed/20 rounded-md px-4 py-2"
@@ -183,7 +184,7 @@ function CompactTimeline({
   isCancelled: boolean;
 }) {
   return (
-    <div className="flex items-center gap-1.5" title={`Status: ${status}`}>
+    <div data-testid="saga-compact-timeline" className="flex items-center gap-1.5" title={`Status: ${status}`}>
       {STEPS.map((step, index) => {
         const isCompleted = !isCancelled && index < activeIndex;
         const isActive    = !isCancelled && index === activeIndex;
@@ -206,7 +207,7 @@ function CompactTimeline({
           </div>
         );
       })}
-      <span className={`ml-2 tech-data text-[10px] font-semibold ${
+      <span data-testid="saga-compact-status" className={`ml-2 tech-data text-[10px] font-semibold ${
         status === "COMPLETED" ? "text-success"
         : status === "CANCELLED" ? "text-failed"
         : status === "PENDING"   ? "text-text-muted"

@@ -9,6 +9,8 @@ import Link from "next/link";
 import api from "@/lib/api/client";
 import { toast } from "sonner";
 
+import { useEffect } from "react";
+
 /* -------------------------------------------------------------------------- */
 /*  Schema                                                                      */
 /* -------------------------------------------------------------------------- */
@@ -30,8 +32,15 @@ type FormData = z.infer<typeof schema>;
 /*  Component                                                                   */
 /* -------------------------------------------------------------------------- */
 export default function LoginPage() {
-  const loginStore = useAuthStore((s) => s.login);
+  const { user, login: loginStore } = useAuthStore();
   const router = useRouter();
+
+  // Redirect if already logged in (prevents navigating back to login page while authenticated)
+  useEffect(() => {
+    if (user) {
+      router.replace(user.role === "ADMIN" ? "/admin/dashboard" : "/customer/products");
+    }
+  }, [user, router]);
 
   const {
     register,
@@ -43,9 +52,9 @@ export default function LoginPage() {
     try {
       if (process.env.NEXT_PUBLIC_USE_MOCK === "true") {
         const role = data.email.includes("admin") ? "admin" : "customer";
-        loginStore("mock-jwt-token", { id: "1", email: data.email, role });
+        loginStore("mock-jwt-token", { id: "1", email: data.email, role: role === "admin" ? "ADMIN" : "CUSTOMER" });
         toast.success("Signed in!", { description: `Welcome back, ${data.email}` });
-        router.push(role === "admin" ? "/admin/dashboard" : "/customer/products");
+        router.replace(role === "admin" ? "/admin/dashboard" : "/customer/products");
         return;
       }
 
@@ -61,15 +70,18 @@ export default function LoginPage() {
       const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
       const payload = JSON.parse(atob(base64));
       
-      const user = {
+      const loggedUser = {
         id: payload.user_id,
         email: payload.email,
-        role: payload.role === "admin" ? "ADMIN" : "CUSTOMER",
+        role: (payload.role || "").toUpperCase() === "ADMIN" ? "ADMIN" : "CUSTOMER",
       };
 
-      loginStore(token, user);
+      loginStore(token, loggedUser);
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('logged_out');
+      }
       toast.success("Signed in!", { description: `Welcome back` });
-      router.push(user.role === "ADMIN" ? "/admin/dashboard" : "/customer/products");
+      router.replace(loggedUser.role === "ADMIN" ? "/admin/dashboard" : "/customer/products");
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??
@@ -85,20 +97,22 @@ export default function LoginPage() {
         <p className="text-text-muted text-sm mb-6">Sign in to Order Processing System</p>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
-          <Field label="Email" error={errors.email?.message}>
+          <Field label="Email" error={errors.email?.message} testId="error-email">
             <input
               {...register("email")}
               type="email"
+              data-testid="input-email"
               autoComplete="email"
               placeholder="user@example.com"
               className={inputClass(!!errors.email)}
             />
           </Field>
 
-          <Field label="Password" error={errors.password?.message}>
+          <Field label="Password" error={errors.password?.message} testId="error-password">
             <input
               {...register("password")}
               type="password"
+              data-testid="input-password"
               autoComplete="current-password"
               placeholder="••••••••"
               className={inputClass(!!errors.password)}
@@ -107,6 +121,7 @@ export default function LoginPage() {
 
           <button
             type="submit"
+            data-testid="btn-submit"
             disabled={isSubmitting}
             className="w-full bg-interactive text-white py-2 px-4 rounded-md font-medium
                        hover:bg-interactive/90 transition-colors
@@ -119,7 +134,7 @@ export default function LoginPage() {
 
         <p className="mt-5 text-center text-sm text-text-muted">
           Don&apos;t have an account?{" "}
-          <Link href="/register" className="text-interactive hover:underline focus:underline focus:outline-none">
+          <Link href="/register" data-testid="link-register" className="text-interactive hover:underline focus:underline focus:outline-none">
             Register
           </Link>
         </p>
@@ -145,10 +160,12 @@ function inputClass(hasError: boolean) {
 function Field({
   label,
   error,
+  testId,
   children,
 }: {
   label: string;
   error?: string;
+  testId?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -156,7 +173,7 @@ function Field({
       <label className="block text-sm font-medium mb-1 text-text-main">{label}</label>
       {children}
       {error && (
-        <p role="alert" className="mt-1 text-xs text-failed">
+        <p role="alert" data-testid={testId} className="mt-1 text-xs text-failed">
           {error}
         </p>
       )}
