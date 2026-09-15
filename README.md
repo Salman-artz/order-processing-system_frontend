@@ -27,9 +27,6 @@ Backend terkait: [order-processing-system_backend](https://github.com/Salman-art
     - Metrik live: Total SKUs, Available Stock, **Locked / Reserved Stock (Terkunci Saga)**, dan Low-Stock alert.
   - **Monitoring Seluruh Pesanan (`/admin/orders`)**: Audit trail log eksekusi Saga per transaksi.
 
-- **Pengujian Kualitas & E2E Testing**:
-  - Playwright End-to-End Test Suite dengan **34 test cases (100% Passing)** mencakup Auth, Catalog, Checkout, Saga Rollback, Midtrans Payment Settlement/Denial, dan Admin Inventory CRUD.
-
 ---
 
 ## Tech Stack
@@ -44,7 +41,6 @@ Backend terkait: [order-processing-system_backend](https://github.com/Salman-art
 | **Form Validation** | React Hook Form + Zod | Schema-based client validation |
 | **Real-time Push** | Native WebSockets | Live Saga progression broadcast |
 | **Notification** | Sonner | Interactive toast alerts |
-| **E2E Testing** | Playwright Test | Automated cross-browser tests |
 | **Containerization** | Docker (Multi-stage) & Compose | Optimized standalone production build |
 
 ---
@@ -73,32 +69,11 @@ NEXT_PUBLIC_USE_MOCK=false
 
 ---
 
-## Menjalankan End-to-End (E2E) Test
-
-Project ini dilengkapi dengan test suite Playwright yang komprehensif:
-
-```bash
-# Menjalankan seluruh 34 E2E test cases
-npm run test:e2e
-
-# Menjalankan dengan mode UI interaktif
-npx playwright test --ui
-```
-
----
-
 ## Menjalankan dengan Docker
-
-```bash
-Copy-Item .env.docker.example .env.docker
-docker compose --env-file .env.docker up -d --build
-```
-
-Melihat log dan menghentikan container:
-```bash
-docker compose logs -f frontend
-docker compose down
-```
+lib/
+  api/client.ts           # Axios instance & token interceptor
+  hooks/useOrderSocket.ts # WebSocket listener hook untuk real-time update
+  store/useAuthStore.ts   # State autentikasi Zustand
 
 ---
 
@@ -120,11 +95,4 @@ lib/
   api/client.ts           # Axios instance & token interceptor
   hooks/useOrderSocket.ts # WebSocket listener hook untuk real-time update
   store/useAuthStore.ts   # State autentikasi Zustand
-e2e/
-  auth.spec.ts            # E2E Test Autentikasi & RBAC
-  customer-products.spec.ts # E2E Test Katalog & Checkout
-  saga-flow.spec.ts       # E2E Test Saga Lifecycle & Midtrans Gateway
-  admin-dashboard.spec.ts # E2E Test Analitik Dashboard
-  admin-orders.spec.ts    # E2E Test Monitoring Pesanan
-  admin-inventory.spec.ts # E2E Test Admin CRUD & Restock Stok
 ```
