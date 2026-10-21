@@ -6,6 +6,27 @@ Backend terkait: [order-processing-system_backend](https://github.com/Salman-art
 
 ---
 
+## 📸 Antarmuka Sistem & Screenshots
+
+<p align="center">
+  <img src="public/screenshots/foto3_realtime_order_monitoring_dashboard.png" alt="Real-Time Order Monitoring Dashboard" width="95%" />
+  <br/>
+  <em>Dashboard Monitoring Real-Time Metrik Pesanan & Konversi Status Order</em>
+</p>
+
+<details open>
+<summary><strong>Lihat Antarmuka Fitur Lainnya ▾</strong></summary>
+
+| Halaman | Preview Antarmuka |
+|---|---|
+| **Customer Storefront**<br/>Katalog produk hardware & alur pembuatan pesanan real-time. | <img src="public/screenshots/foto1_customer_storefront_order.png" alt="Customer Storefront" width="480" /> |
+| **Saga Execution Timeline**<br/>Audit log langkah transaksi Saga (Pending, Reserved, Paid, Completed, Cancelled). | <img src="public/screenshots/foto2_saga_execution_timeline_ui.png" alt="Saga Execution Timeline" width="480" /> |
+| **Inventory & Stock Reservation**<br/>Manajemen stok produk, alokasi reserved stock, dan pencegahan race condition. | <img src="public/screenshots/foto4_inventory_reservation_rollback.png" alt="Inventory Reservation" width="480" /> |
+
+</details>
+
+---
+
 ## Status & Fitur Utama
 
 - **Customer Portal**:
