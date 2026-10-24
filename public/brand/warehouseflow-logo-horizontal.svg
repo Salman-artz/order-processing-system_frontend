@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 54" fill="none">
+  <!-- WarehouseFlow Emblem -->
+  <g transform="translate(4, 3)">
+    <path d="M24 4L6 14V42H42V14L24 4Z" fill="#191D23" stroke="#F0B44D" stroke-width="2.5" stroke-linejoin="round"/>
+    <path d="M24 4V16" stroke="#F0B44D" stroke-width="2" stroke-linecap="round"/>
+    <rect x="12" y="24" width="10" height="10" rx="1.5" fill="#222831" stroke="#8B95A5" stroke-width="1.5"/>
+    <path d="M17 24V34M12 29H22" stroke="#8B95A5" stroke-width="1" stroke-linecap="round"/>
+    <rect x="26" y="24" width="10" height="10" rx="1.5" fill="#222831" stroke="#8B95A5" stroke-width="1.5"/>
+    <path d="M31 24V34M26 29H36" stroke="#8B95A5" stroke-width="1" stroke-linecap="round"/>
+    <rect x="19" y="14" width="10" height="9" rx="1.5" fill="#F0B44D" stroke="#FFFFFF" stroke-width="1.5"/>
+    <path d="M24 14V23M19 18.5H29" stroke="#191D23" stroke-width="1" stroke-linecap="round"/>
+    <path d="M8 38C12 40 18 41 24 41C34 41 39 36 39 31C39 26 34 23 27 21" stroke="#F0B44D" stroke-width="2" stroke-linecap="round" stroke-dasharray="2 3"/>
+    <circle cx="8" cy="38" r="2" fill="#35B779"/>
+    <circle cx="27" cy="21" r="2" fill="#F0B44D"/>
+  </g>
+
+  <!-- Wordmark & Tagline -->
+  <text x="62" y="28" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="22" font-weight="800" fill="#F5F2EA" letter-spacing="-0.5">Warehouse<tspan fill="#F0B44D">Flow</tspan></text>
+  <text x="62" y="44" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700" fill="#8B95A5" letter-spacing="1.8">FROM INVENTORY TO DELIVERY, IN REAL TIME</text>
+</svg>
