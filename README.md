@@ -1,119 +1,71 @@
-# Order Processing System - Frontend
+# Order Processing System - Frontend (Web Next.js)
 
-Web application modern Next.js untuk **Customer** dan **Admin** pada Order Processing System. Frontend terhubung ke Order Service (API Gateway) melalui REST API, terintegrasi dengan Payment Gateway Midtrans, dan menampilkan update status pemrosesan Saga secara real-time melalui WebSocket.
+Web application modern Next.js 16 untuk **Customer** dan **Administrator** pada platform **Sistem Pemrosesan Pesanan Terdistribusi Berbasis Microservices**. Mengusung tema visual **Titanium Gunmetal & Industrial Amber**, *fixed viewport layout* bebas scroll ganda, serta integrasi visualisasi **Distributed Saga Choreography** dan telemetry event streaming secara real-time.
 
-Backend terkait: [order-processing-system_backend](https://github.com/Salman-artz/order-processing-system_backend).
+Backend repositori: [order-processing-system_backend](https://github.com/Salman-artz/order-processing-system_backend).
 
 ---
 
-## 📸 Antarmuka Sistem & Screenshots
+## 📸 Antarmuka Sistem & Screenshots Preview
 
-<p align="center">
-  <img src="public/screenshots/foto3_realtime_order_monitoring_dashboard.png" alt="Real-Time Order Monitoring Dashboard" width="95%" />
-  <br/>
-  <em>Dashboard Monitoring Real-Time Metrik Pesanan & Konversi Status Order</em>
-</p>
-
-<details open>
-<summary><strong>Lihat Antarmuka Fitur Lainnya ▾</strong></summary>
-
-| Halaman | Preview Antarmuka |
+| Preview Antarmuka | Deskripsi Fitur & Inovasi UI |
 |---|---|
-| **Customer Storefront**<br/>Katalog produk hardware & alur pembuatan pesanan real-time. | <img src="public/screenshots/foto1_customer_storefront_order.png" alt="Customer Storefront" width="480" /> |
-| **Saga Execution Timeline**<br/>Audit log langkah transaksi Saga (Pending, Reserved, Paid, Completed, Cancelled). | <img src="public/screenshots/foto2_saga_execution_timeline_ui.png" alt="Saga Execution Timeline" width="480" /> |
-| **Inventory & Stock Reservation**<br/>Manajemen stok produk, alokasi reserved stock, dan pencegahan race condition. | <img src="public/screenshots/foto4_inventory_reservation_rollback.png" alt="Inventory Reservation" width="480" /> |
-
-</details>
-
----
-
-## Status & Fitur Utama
-
-- **Customer Portal**:
-  - Register dan Login dengan JWT stateless authentication.
-  - Katalog produk interaktif dengan ketersediaan stok live.
-  - Pembuatan pesanan (Checkout).
-  - Riwayat pesanan & detail pesanan lengkap dengan resolusi nama produk.
-  - **Integrasi Payment Gateway Midtrans Snap**: Pembayaran via QRIS, GoPay, BCA/Mandiri Virtual Account, & Kartu Kredit.
-  - **Saga Status Timeline**: Visualisasi interaktif stepper status (`PENDING` $\rightarrow$ `RESERVED` $\rightarrow$ `AWAITING_PAYMENT` $\rightarrow$ `COMPLETED` / `CANCELLED`).
-  - Update realtime via WebSocket tanpa perlu refresh halaman.
-
-- **Admin Portal**:
-  - **Dashboard & Analitik**: KPI Ringkasan revenue, total pesanan, dan grafik performa order.
-  - **Inventory & Stock Management (`/admin/inventory`)**:
-    - Tambah produk baru (*Create SKU*).
-    - Edit nama dan harga barang.
-    - **Fitur Restock Stok**: Tambah stok unit cepat (+5, +10, +25, +50) atau input kustom.
-    - Hapus produk dari katalog (*Delete*).
-    - Metrik live: Total SKUs, Available Stock, **Locked / Reserved Stock (Terkunci Saga)**, dan Low-Stock alert.
-  - **Monitoring Seluruh Pesanan (`/admin/orders`)**: Audit trail log eksekusi Saga per transaksi.
+| <img src="public/screenshots/foto3_customer_storefront_order.png" alt="Customer Storefront & Live Cockpit" width="540" /> | **Live Operations Cockpit & Storefront**<br/>Tata letak *Split Workbench*: Panel kiri untuk katalog item & trigger transaksi (`Place Order` vs `Simulate Failure`), panel kanan atas untuk topologi 4 microservice, dan panel kanan bawah untuk live NATS event stream. |
+| <img src="public/screenshots/foto4_saga_execution_timeline_ui.png" alt="Saga Execution Timeline UI" width="540" /> | **Saga Execution Timeline UI**<br/>Visualisasi tahapan Saga terdistribusi dengan durasi latensi per span, indikator node, serta audit trail kompensasi otomatis saat pembayaran gagal. |
+| <img src="public/screenshots/foto5_realtime_order_monitoring_dashboard.png" alt="Real-time Order Monitoring Dashboard" width="540" /> | **Real-time Order Monitoring Dashboard**<br/>Konsol observabilitas metrik throughput NATS JetStream, visualisasi rasio keberhasilan Saga (98.4%), dan kesehatan node microservice. |
+| <img src="public/screenshots/foto6_inventory_reservation_rollback.png" alt="Inventory Reservation & Rollback UI" width="540" /> | **Inventory Reservation & Rollback UI**<br/>Buku besar inventaris berdensitas tinggi: pemisahan *Available Stock* vs *Reserved Stock (Saga Locks)* dan riwayat kompensasi stok. |
+| <img src="public/screenshots/foto1_login_light_mode.png" alt="Login Mode Terang" width="540" /> | **Login Mode Terang (Light Mode)**<br/>Antarmuka berstandar enterprise dengan palet Titanium Canvas dan tipografi monospace berdensitas tinggi. |
+| <img src="public/screenshots/foto2_login_dark_mode.png" alt="Login Mode Gelap" width="540" /> | **Login Mode Gelap (Dark Mode)**<br/>Palet Titanium Gunmetal & Industrial Amber dengan rasio kontras tinggi dan telemetry metadata status cluster. |
 
 ---
 
-## Tech Stack
+## 🏛️ Frontend Clean Architecture & Modular Domain Services
+
+Seluruh komponen UI sepenuhnya terpisah dari layer data fetching dengan menerapkan **Modular Domain Services Layer** (`src/services/` & `services/`):
+- `services/product.service.ts`: Abstraksi pengelolaan katalog produk, stok available vs reserved, dan mutasi restock.
+- `services/order.service.ts`: Abstraksi pembuatan order normal, simulasi failure rollback, dan audit timeline Saga.
+- `services/saga.service.ts`: Abstraksi telemetry NATS JetStream event stream, kesehatan node cluster, dan OpenTelemetry trace waterfall.
+- `services/auth.service.ts`: Abstraksi autentikasi JWT, decoding token, dan sesi pengguna.
+
+Komponen halaman memiliki **0 direct fetch/axios** dan sepenuhnya mengonsumsi API melalui service kontrak domain yang *testable* dan *decoupled*.
+
+---
+
+## 🎨 Desain Sistem: Titanium Gunmetal & Industrial Amber
+- **Background Utama**: Titanium Gunmetal (`#0F1115`) pada Dark Mode dan Canvas Warm White (`#F8F9FA`) pada Light Mode.
+- **Borders & Partisi**: Garis batas tipis (*hairline borders*) solid tanpa gradient dekoratif berlebih.
+- **Aksen Amber Disiplin**: Warna amber (`#F59E0B`) hanya muncul ketika ada informasi penting yang butuh perhatian (warning, in-progress, state selection).
+- **Semantik Status Terstandar**:
+  - Hijau (`#10B981`) untuk Commit / Keberhasilan transaksi
+  - Merah (`#EF4444`) untuk Rollback / Kegagalan / Kompensasi
+  - Amber (`#F59E0B`) untuk Pending / In-flight / Stock Locks
+  - Slate (`#64748B`) untuk metadata teknis netral
+
+---
+
+## 🛠️ Tech Stack Frontend
 
 | Area | Teknologi | Keterangan |
 |---|---|---|
-| **Framework** | Next.js 16 (App Router) | React Server & Client Components |
-| **Bahasa** | TypeScript | Strict type safety |
-| **Styling** | Tailwind CSS v4 & Lucide Icons | Modern, clean, and responsive UI |
-| **HTTP Client** | Axios | Request interceptor & JWT token injection |
-| **State & Fetching** | TanStack Query v5 & Zustand | Client caching & reactive state |
-| **Form Validation** | React Hook Form + Zod | Schema-based client validation |
-| **Real-time Push** | Native WebSockets | Live Saga progression broadcast |
-| **Notification** | Sonner | Interactive toast alerts |
-| **Containerization** | Docker (Multi-stage) & Compose | Optimized standalone production build |
+| **Framework** | Next.js 16 (App Router) | High-performance React 19 architecture |
+| **Bahasa** | TypeScript | Strict type checking & zero `any` leakage |
+| **Styling** | Tailwind CSS v4 & Lucide Icons | Solid enterprise UI, responsive full-width |
+| **State & Caching** | TanStack Query v5 & Zustand | Reactive client state & async cache invalidation |
+| **Trace Inspector** | OpenTelemetry Waterfall Drawer | Latency breakdown & raw JSON payload viewer |
+| **Charts** | Recharts | Throughput bar chart & Saga distribution donut |
+| **Testing & Quality** | Playwright E2E Test Suite | Automated end-to-end user journey verification |
 
 ---
 
-## Menjalankan Local Development
+## 🚀 Menjalankan Frontend Secara Lokal
 
 ```bash
 # 1. Install dependencies
 npm install
 
-# 2. Salin file konfigurasi environment
-Copy-Item .env.local.example .env.local
-
-# 3. Jalankan development server
+# 2. Jalankan development server
 npm run dev
-```
 
-Buka [http://localhost:3000](http://localhost:3000).
-
-Konfigurasi `.env.local` default:
-```env
-NEXT_PUBLIC_API_BASE_URL=http://localhost:8080/api/v1
-NEXT_PUBLIC_WS_URL=ws://localhost:8083/ws
-NEXT_PUBLIC_USE_MOCK=false
-```
-
----
-
-## Menjalankan dengan Docker
-lib/
-  api/client.ts           # Axios instance & token interceptor
-  hooks/useOrderSocket.ts # WebSocket listener hook untuk real-time update
-  store/useAuthStore.ts   # State autentikasi Zustand
-
----
-
-## Struktur Direktori
-
-```text
-app/
-  (auth)/login/           # Halaman Login Customer & Admin
-  (auth)/register/        # Halaman Registrasi Customer
-  admin/dashboard/        # KPI Metrik & Analitik Admin
-  admin/inventory/        # Manajemen Produk & Restock Stok Admin
-  admin/orders/           # Daftar & Detail Monitoring Pesanan Admin
-  customer/products/      # Katalog Produk & Checkout Pesanan
-  customer/orders/        # Riwayat & Detail Pesanan (Midtrans Snap Payment)
-components/
-  SagaTimeline.tsx        # Komponen visualisasi stepper Saga
-  Sidebar.tsx             # Navigasi sidebar dinamis sesuai Role
-lib/
-  api/client.ts           # Axios instance & token interceptor
-  hooks/useOrderSocket.ts # WebSocket listener hook untuk real-time update
-  store/useAuthStore.ts   # State autentikasi Zustand
+# 3. Jalankan automated build check
+npm run build
 ```

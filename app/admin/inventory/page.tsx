@@ -2,663 +2,249 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import api from "@/lib/api/client";
+import { ProductService, ProductItem } from "@/services/product.service";
 import { toast } from "sonner";
 import { 
   Package, 
   Plus, 
-  Edit, 
-  Trash2, 
-  RefreshCw, 
+  RotateCcw, 
   Search, 
   AlertTriangle, 
   CheckCircle2, 
+  ShieldCheck, 
   Layers, 
-  TrendingUp,
-  X
+  History, 
+  X,
+  Server
 } from "lucide-react";
-
-interface ProductItem {
-  id: string;
-  name: string;
-  stock_available: number;
-  stock_reserved: number;
-  stock: number;
-  price: number;
-}
+import clsx from "clsx";
 
 export default function AdminInventoryPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
-  const [filterStock, setFilterStock] = useState<"all" | "low" | "out">("all");
-
-  // Modals state
-  const [isAddOpen, setIsAddOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<ProductItem | null>(null);
   const [restockProduct, setRestockProduct] = useState<ProductItem | null>(null);
-  const [deletingProduct, setDeletingProduct] = useState<ProductItem | null>(null);
-
-  // Form states
-  const [addForm, setAddForm] = useState({ name: "", price: "", stock: "" });
-  const [editForm, setEditForm] = useState({ name: "", price: "" });
   const [restockQty, setRestockQty] = useState("10");
 
-  // Fetch Products
-  const { data: products = [], isLoading, isError, refetch } = useQuery<ProductItem[]>({
+  // Fetch Products via Domain Service
+  const { data: products = [], isLoading } = useQuery<ProductItem[]>({
     queryKey: ["admin-products"],
-    queryFn: async () => {
-      if (process.env.NEXT_PUBLIC_USE_MOCK === "true") {
-        return [
-          { id: "4120ce5d-ac77-45f1-bd50-c5bc5d2725ad", name: "GPU NVIDIA RTX 4090 24GB", price: 28500000, stock: 12, stock_reserved: 10, stock_available: 2 },
-          { id: "13ab7375-c7b2-4e83-8cc0-dfd981ed74d7", name: "Headphone Sony WH-1000XM5", price: 4500000, stock: 25, stock_reserved: 5, stock_available: 20 },
-          { id: "79e5bb66-f451-4960-b144-1dc6af9866f1", name: "Laptop ASUS VivoBook 15 Core i5", price: 8750000, stock: 30, stock_reserved: 5, stock_available: 25 },
-          { id: "6e37486f-7ce2-41c1-9046-a8f2d943006f", name: "Mechanical Keyboard Keychron K2 RGB", price: 1350000, stock: 45, stock_reserved: 5, stock_available: 40 },
-          { id: "cf217e3f-1cac-40f1-ae59-166e659c743a", name: "Monitor LG 24\" IPS Full HD", price: 2850000, stock: 20, stock_reserved: 5, stock_available: 15 },
-          { id: "eb824b0c-dca7-48b9-a72b-3448dd3627a2", name: "SSD External Samsung T7 1TB", price: 1750000, stock: 40, stock_reserved: 5, stock_available: 35 },
-        ];
-      }
-      try {
-        const res = await api.get("/products");
-        return res.data.products ?? res.data;
-      } catch {
-        return [
-          { id: "4120ce5d-ac77-45f1-bd50-c5bc5d2725ad", name: "GPU NVIDIA RTX 4090 24GB", price: 28500000, stock: 12, stock_reserved: 10, stock_available: 2 },
-          { id: "13ab7375-c7b2-4e83-8cc0-dfd981ed74d7", name: "Headphone Sony WH-1000XM5", price: 4500000, stock: 25, stock_reserved: 5, stock_available: 20 },
-          { id: "79e5bb66-f451-4960-b144-1dc6af9866f1", name: "Laptop ASUS VivoBook 15 Core i5", price: 8750000, stock: 30, stock_reserved: 5, stock_available: 25 },
-          { id: "6e37486f-7ce2-41c1-9046-a8f2d943006f", name: "Mechanical Keyboard Keychron K2 RGB", price: 1350000, stock: 45, stock_reserved: 5, stock_available: 40 },
-          { id: "cf217e3f-1cac-40f1-ae59-166e659c743a", name: "Monitor LG 24\" IPS Full HD", price: 2850000, stock: 20, stock_reserved: 5, stock_available: 15 },
-          { id: "eb824b0c-dca7-48b9-a72b-3448dd3627a2", name: "SSD External Samsung T7 1TB", price: 1750000, stock: 40, stock_reserved: 5, stock_available: 35 },
-        ];
-      }
-    },
-  });
-
-  // Create Product Mutation
-  const createMutation = useMutation({
-    mutationFn: async (payload: { name: string; price: number; stock: number }) => {
-      return await api.post("/products", payload);
-    },
-    onSuccess: () => {
-      toast.success("Product created successfully!");
-      setIsAddOpen(false);
-      setAddForm({ name: "", price: "", stock: "" });
-      queryClient.invalidateQueries({ queryKey: ["admin-products"] });
-      queryClient.invalidateQueries({ queryKey: ["products"] });
-    },
-    onError: (err: any) => {
-      toast.error(err.response?.data?.error || "Failed to create product");
-    },
-  });
-
-  // Update Product Mutation
-  const updateMutation = useMutation({
-    mutationFn: async ({ id, name, price }: { id: string; name: string; price: number }) => {
-      return await api.put(`/products/${id}`, { name, price });
-    },
-    onSuccess: () => {
-      toast.success("Product updated successfully!");
-      setEditingProduct(null);
-      queryClient.invalidateQueries({ queryKey: ["admin-products"] });
-      queryClient.invalidateQueries({ queryKey: ["products"] });
-    },
-    onError: (err: any) => {
-      toast.error(err.response?.data?.error || "Failed to update product");
-    },
+    queryFn: () => ProductService.getProducts(),
+    staleTime: 30_000,
   });
 
   // Restock Mutation
   const restockMutation = useMutation({
-    mutationFn: async ({ id, quantity }: { id: string; quantity: number }) => {
-      try {
-        return await api.patch(`/products/${id}/stock`, { quantity });
-      } catch (e) {
-        return await api.post(`/products/${id}/restock`, { quantity });
-      }
+    mutationFn: async ({ id, qty }: { id: string; qty: number }) => {
+      await ProductService.restockProduct(id, qty);
     },
     onSuccess: () => {
       toast.success("Stock replenished successfully!");
       setRestockProduct(null);
       queryClient.invalidateQueries({ queryKey: ["admin-products"] });
-      queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["products-cockpit"] });
     },
-    onError: (err: any) => {
-      toast.error(err.response?.data?.error || "Failed to restock product");
-    },
-  });
-
-  // Delete Mutation
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      return await api.delete(`/products/${id}`);
-    },
-    onSuccess: () => {
-      toast.success("Product deleted successfully!");
-      setDeletingProduct(null);
-      queryClient.invalidateQueries({ queryKey: ["admin-products"] });
-      queryClient.invalidateQueries({ queryKey: ["products"] });
-    },
-    onError: (err: any) => {
-      toast.error(err.response?.data?.error || "Failed to delete product");
+    onError: () => {
+      toast.error("Failed to replenish stock");
     },
   });
 
-  // Filtered products
-  const filtered = products.filter((p) => {
-    const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase());
-    if (!matchesSearch) return false;
-    const available = p.stock_available ?? p.stock ?? 0;
-    if (filterStock === "low") return available > 0 && available <= 10;
-    if (filterStock === "out") return available === 0;
-    return true;
-  });
+  const filteredProducts = products.filter((p) =>
+    p.name.toLowerCase().includes(search.toLowerCase())
+  );
 
-  // Calculations
-  const totalProducts = products.length;
-  const totalAvailableStock = products.reduce((sum, p) => sum + (p.stock_available ?? p.stock ?? 0), 0);
-  const totalReservedStock = products.reduce((sum, p) => sum + (p.stock_reserved ?? 0), 0);
-  const lowStockCount = products.filter((p) => (p.stock_available ?? p.stock ?? 0) <= 10).length;
+  const totalStock = products.reduce((acc, p) => acc + p.stock, 0);
+  const totalReserved = products.reduce((acc, p) => acc + p.stock_reserved, 0);
+  const totalAvailable = products.reduce((acc, p) => acc + p.stock_available, 0);
 
   return (
-    <div className="space-y-8" data-testid="admin-inventory-page">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="heading text-3xl font-bold text-text-main flex items-center gap-3">
-            <Package className="text-interactive" size={32} />
-            Inventory & Stock Management
-          </h1>
-          <p className="text-text-muted mt-1">
-            Manage product catalog, pricing, and live inventory levels across services.
-          </p>
-        </div>
-        <button
-          data-testid="btn-add-product"
-          onClick={() => setIsAddOpen(true)}
-          className="flex items-center justify-center gap-2 bg-interactive hover:bg-interactive-hover text-background px-4 py-2.5 rounded-lg font-semibold transition-all shadow-sm shadow-interactive/20 cursor-pointer"
-        >
-          <Plus size={18} />
-          Add Product
-        </button>
-      </div>
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-panel border border-border p-5 rounded-xl flex items-center gap-4">
-          <div className="w-12 h-12 rounded-lg bg-interactive/10 flex items-center justify-center text-interactive">
-            <Package size={24} />
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Total SKUs</p>
-            <p className="text-2xl font-bold text-text-main mt-0.5" data-testid="stat-total-skus">{totalProducts}</p>
-          </div>
-        </div>
-
-        <div className="bg-panel border border-border p-5 rounded-xl flex items-center gap-4">
-          <div className="w-12 h-12 rounded-lg bg-success/10 flex items-center justify-center text-success">
-            <CheckCircle2 size={24} />
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Available Stock</p>
-            <p className="text-2xl font-bold text-success mt-0.5">{totalAvailableStock} units</p>
-          </div>
-        </div>
-
-        <div className="bg-panel border border-border p-5 rounded-xl flex items-center gap-4">
-          <div className="w-12 h-12 rounded-lg bg-warning/10 flex items-center justify-center text-warning">
-            <Layers size={24} />
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Locked / Reserved</p>
-            <p className="text-2xl font-bold text-warning mt-0.5">{totalReservedStock} units</p>
-          </div>
-        </div>
-
-        <div className="bg-panel border border-border p-5 rounded-xl flex items-center gap-4">
-          <div className="w-12 h-12 rounded-lg bg-failed/10 flex items-center justify-center text-failed">
-            <AlertTriangle size={24} />
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Low / Out of Stock</p>
-            <p className="text-2xl font-bold text-failed mt-0.5">{lowStockCount} items</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Filter and Search Bar */}
-      <div className="bg-panel border border-border p-4 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div className="relative w-full sm:w-80">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
-          <input
-            type="text"
-            placeholder="Search product name..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            data-testid="input-search-inventory"
-            className="w-full bg-background border border-border pl-9 pr-4 py-2 rounded-lg text-sm text-text-main placeholder:text-text-muted focus:outline-none focus:border-interactive"
-          />
-        </div>
-
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <button
-            onClick={() => setFilterStock("all")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-              filterStock === "all" ? "bg-interactive text-background" : "bg-background border border-border text-text-muted hover:text-text-main"
-            }`}
-          >
-            All Stock
-          </button>
-          <button
-            onClick={() => setFilterStock("low")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-              filterStock === "low" ? "bg-warning text-background" : "bg-background border border-border text-text-muted hover:text-text-main"
-            }`}
-          >
-            Low Stock (≤10)
-          </button>
-          <button
-            onClick={() => setFilterStock("out")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-              filterStock === "out" ? "bg-failed text-background" : "bg-background border border-border text-text-muted hover:text-text-main"
-            }`}
-          >
-            Out of Stock (0)
-          </button>
-          <button
-            onClick={() => refetch()}
-            className="p-2 bg-background border border-border hover:bg-border rounded-lg text-text-muted hover:text-text-main transition-colors ml-auto cursor-pointer"
-            title="Refresh"
-          >
-            <RefreshCw size={16} />
-          </button>
-        </div>
-      </div>
-
-      {/* Table Container */}
-      <div className="bg-panel border border-border rounded-xl overflow-hidden">
-        {isLoading ? (
-          <div className="p-12 text-center text-text-muted">Loading inventory catalog...</div>
-        ) : isError ? (
-          <div className="p-12 text-center text-failed">Failed to fetch inventory catalog.</div>
-        ) : filtered.length === 0 ? (
-          <div className="p-12 text-center text-text-muted" data-testid="empty-inventory">
-            No products found matching your filter criteria.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm" data-testid="inventory-table">
-              <thead className="bg-background border-b border-border text-xs uppercase font-semibold text-text-muted">
-                <tr>
-                  <th className="px-6 py-4">Product Name</th>
-                  <th className="px-6 py-4">Price</th>
-                  <th className="px-6 py-4">Available Stock</th>
-                  <th className="px-6 py-4">Reserved Stock</th>
-                  <th className="px-6 py-4">Status</th>
-                  <th className="px-6 py-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {filtered.map((p) => {
-                  const available = p.stock_available ?? p.stock ?? 0;
-                  const isLow = available > 0 && available <= 10;
-                  const isOut = available === 0;
-
-                  return (
-                    <tr key={p.id} className="hover:bg-interactive/5 transition-colors" data-testid={`product-row-${p.id}`}>
-                      <td className="px-6 py-4 font-semibold text-text-main">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded bg-border flex items-center justify-center text-text-muted shrink-0">
-                            <Package size={16} />
-                          </div>
-                          <div>
-                            <p className="font-semibold text-text-main">{p.name}</p>
-                            <p className="text-xs text-text-muted font-mono">{p.id.substring(0, 8)}...</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 font-medium text-text-main">
-                        Rp {Number(p.price).toLocaleString("id-ID")}
-                      </td>
-                      <td className="px-6 py-4 font-bold">
-                        <span className={isOut ? "text-failed" : isLow ? "text-warning" : "text-success"}>
-                          {available} units
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-text-muted font-medium">
-                        {p.stock_reserved ?? 0} units
-                      </td>
-                      <td className="px-6 py-4">
-                        {isOut ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-failed/10 text-failed border border-failed/20">
-                            Out of Stock
-                          </span>
-                        ) : isLow ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-warning/10 text-warning border border-warning/20">
-                            Low Stock
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-success/10 text-success border border-success/20">
-                            In Stock
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            data-testid={`btn-restock-${p.id}`}
-                            onClick={() => {
-                              setRestockProduct(p);
-                              setRestockQty("10");
-                            }}
-                            className="flex items-center gap-1 bg-interactive/10 hover:bg-interactive/20 text-interactive px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
-                            title="Replenish stock"
-                          >
-                            <TrendingUp size={14} />
-                            Restock
-                          </button>
-                          <button
-                            data-testid={`btn-edit-${p.id}`}
-                            onClick={() => {
-                              setEditingProduct(p);
-                              setEditForm({ name: p.name, price: String(p.price) });
-                            }}
-                            className="p-1.5 text-text-muted hover:text-text-main hover:bg-border rounded-lg transition-colors cursor-pointer"
-                            title="Edit details"
-                          >
-                            <Edit size={16} />
-                          </button>
-                          <button
-                            data-testid={`btn-delete-${p.id}`}
-                            onClick={() => setDeletingProduct(p)}
-                            className="p-1.5 text-text-muted hover:text-failed hover:bg-failed/10 rounded-lg transition-colors cursor-pointer"
-                            title="Delete product"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* ── Modal: Add Product ────────────────────────────────────────── */}
-      {isAddOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-panel border border-border rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between">
-              <h3 className="heading text-xl font-bold text-text-main">Add New Product</h3>
-              <button onClick={() => setIsAddOpen(false)} className="text-text-muted hover:text-text-main p-1">
-                <X size={20} />
-              </button>
-            </div>
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                createMutation.mutate({
-                  name: addForm.name,
-                  price: parseFloat(addForm.price) || 0,
-                  stock: parseInt(addForm.stock) || 0,
-                });
-              }}
-              className="space-y-4"
-            >
-              <div>
-                <label className="block text-xs font-semibold uppercase text-text-muted mb-1.5">Product Name</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Mechanical Keyboard Pro"
-                  value={addForm.name}
-                  onChange={(e) => setAddForm({ ...addForm, name: e.target.value })}
-                  data-testid="input-add-product-name"
-                  className="w-full bg-background border border-border px-3.5 py-2.5 rounded-lg text-sm text-text-main focus:outline-none focus:border-interactive"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase text-text-muted mb-1.5">Price (IDR)</label>
-                <input
-                  type="number"
-                  required
-                  min="0"
-                  step="1000"
-                  placeholder="e.g. 1500000"
-                  value={addForm.price}
-                  onChange={(e) => setAddForm({ ...addForm, price: e.target.value })}
-                  data-testid="input-add-product-price"
-                  className="w-full bg-background border border-border px-3.5 py-2.5 rounded-lg text-sm text-text-main focus:outline-none focus:border-interactive"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase text-text-muted mb-1.5">Initial Stock</label>
-                <input
-                  type="number"
-                  required
-                  min="0"
-                  placeholder="e.g. 50"
-                  value={addForm.stock}
-                  onChange={(e) => setAddForm({ ...addForm, stock: e.target.value })}
-                  data-testid="input-add-product-stock"
-                  className="w-full bg-background border border-border px-3.5 py-2.5 rounded-lg text-sm text-text-main focus:outline-none focus:border-interactive"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-border">
-                <button
-                  type="button"
-                  onClick={() => setIsAddOpen(false)}
-                  className="px-4 py-2 text-sm text-text-muted hover:text-text-main cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={createMutation.isPending}
-                  data-testid="btn-submit-add-product"
-                  className="bg-interactive hover:bg-interactive-hover text-background px-5 py-2 rounded-lg text-sm font-semibold transition-all shadow-sm cursor-pointer disabled:opacity-50"
-                >
-                  {createMutation.isPending ? "Creating..." : "Create Product"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ── Modal: Edit Product ───────────────────────────────────────── */}
-      {editingProduct && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-panel border border-border rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between">
-              <h3 className="heading text-xl font-bold text-text-main">Edit Product Details</h3>
-              <button onClick={() => setEditingProduct(null)} className="text-text-muted hover:text-text-main p-1">
-                <X size={20} />
-              </button>
-            </div>
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                updateMutation.mutate({
-                  id: editingProduct.id,
-                  name: editForm.name,
-                  price: parseFloat(editForm.price) || 0,
-                });
-              }}
-              className="space-y-4"
-            >
-              <div>
-                <label className="block text-xs font-semibold uppercase text-text-muted mb-1.5">Product Name</label>
-                <input
-                  type="text"
-                  required
-                  value={editForm.name}
-                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                  data-testid="input-edit-product-name"
-                  className="w-full bg-background border border-border px-3.5 py-2.5 rounded-lg text-sm text-text-main focus:outline-none focus:border-interactive"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase text-text-muted mb-1.5">Price (IDR)</label>
-                <input
-                  type="number"
-                  required
-                  min="0"
-                  step="1000"
-                  value={editForm.price}
-                  onChange={(e) => setEditForm({ ...editForm, price: e.target.value })}
-                  data-testid="input-edit-product-price"
-                  className="w-full bg-background border border-border px-3.5 py-2.5 rounded-lg text-sm text-text-main focus:outline-none focus:border-interactive"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-border">
-                <button
-                  type="button"
-                  onClick={() => setEditingProduct(null)}
-                  className="px-4 py-2 text-sm text-text-muted hover:text-text-main cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={updateMutation.isPending}
-                  data-testid="btn-submit-edit-product"
-                  className="bg-interactive hover:bg-interactive-hover text-background px-5 py-2 rounded-lg text-sm font-semibold transition-all shadow-sm cursor-pointer disabled:opacity-50"
-                >
-                  {updateMutation.isPending ? "Saving..." : "Save Changes"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ── Modal: Restock Product ────────────────────────────────────── */}
+    <div className="space-y-4 font-mono select-none">
+      {/* Restock Modal */}
       {restockProduct && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-panel border border-border rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="bg-panel border border-border rounded p-6 max-w-sm w-full space-y-4 shadow-xl">
             <div className="flex items-center justify-between">
-              <h3 className="heading text-xl font-bold text-text-main">Replenish Stock</h3>
-              <button onClick={() => setRestockProduct(null)} className="text-text-muted hover:text-text-main p-1">
-                <X size={20} />
+              <h3 className="tech-data font-bold text-sm text-text-main flex items-center gap-2">
+                <RotateCcw size={15} className="text-interactive" />
+                Restock SKU Inventory
+              </h3>
+              <button onClick={() => setRestockProduct(null)} className="text-text-muted hover:text-text-main">
+                <X size={16} />
               </button>
             </div>
-
-            <div className="p-4 bg-background border border-border rounded-xl flex items-center justify-between">
-              <div>
-                <p className="font-semibold text-text-main">{restockProduct.name}</p>
-                <p className="text-xs text-text-muted mt-0.5">Current available units</p>
-              </div>
-              <span className="text-xl font-bold text-interactive">
-                {restockProduct.stock_available ?? restockProduct.stock ?? 0}
-              </span>
+            <div className="text-xs text-text-muted">
+              Replenishing inventory for: <strong className="text-text-main">{restockProduct.name}</strong>
             </div>
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                restockMutation.mutate({
-                  id: restockProduct.id,
-                  quantity: parseInt(restockQty) || 0,
-                });
-              }}
-              className="space-y-4"
-            >
-              <div>
-                <label className="block text-xs font-semibold uppercase text-text-muted mb-1.5">
-                  Quantity to Add
-                </label>
-                <div className="flex gap-2 mb-2">
-                  {[5, 10, 25, 50].map((qty) => (
-                    <button
-                      key={qty}
-                      type="button"
-                      onClick={() => setRestockQty(String(qty))}
-                      className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                        restockQty === String(qty)
-                          ? "bg-interactive text-background"
-                          : "bg-background border border-border text-text-muted hover:text-text-main"
-                      }`}
-                    >
-                      +{qty}
-                    </button>
-                  ))}
-                </div>
-                <input
-                  type="number"
-                  required
-                  min="1"
-                  value={restockQty}
-                  onChange={(e) => setRestockQty(e.target.value)}
-                  data-testid="input-restock-qty"
-                  className="w-full bg-background border border-border px-3.5 py-2.5 rounded-lg text-sm text-text-main focus:outline-none focus:border-interactive"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-border">
-                <button
-                  type="button"
-                  onClick={() => setRestockProduct(null)}
-                  className="px-4 py-2 text-sm text-text-muted hover:text-text-main cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={restockMutation.isPending}
-                  data-testid="btn-submit-restock"
-                  className="bg-interactive hover:bg-interactive-hover text-background px-5 py-2 rounded-lg text-sm font-semibold transition-all shadow-sm cursor-pointer disabled:opacity-50"
-                >
-                  {restockMutation.isPending ? "Replenishing..." : "Add Stock"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ── Modal: Delete Confirmation ───────────────────────────────── */}
-      {deletingProduct && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-panel border border-border rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95">
-            <div className="flex items-center gap-3 text-failed">
-              <AlertTriangle size={24} />
-              <h3 className="heading text-xl font-bold">Delete Product</h3>
+            <div className="space-y-1.5 text-xs">
+              <label className="text-text-dim text-[11px] block">Additional Units</label>
+              <input
+                type="number"
+                value={restockQty}
+                onChange={(e) => setRestockQty(e.target.value)}
+                min="1"
+                className="w-full bg-background border border-border rounded px-3 py-2 text-text-main focus:outline-none focus:border-interactive"
+              />
             </div>
-
-            <p className="text-sm text-text-muted">
-              Are you sure you want to remove <span className="font-semibold text-text-main">{deletingProduct.name}</span> from the inventory? This action cannot be undone.
-            </p>
-
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-border">
+            <div className="flex justify-end gap-2 text-xs">
               <button
-                type="button"
-                onClick={() => setDeletingProduct(null)}
-                className="px-4 py-2 text-sm text-text-muted hover:text-text-main cursor-pointer"
+                onClick={() => setRestockProduct(null)}
+                className="px-3 py-1.5 rounded bg-card border border-border text-text-muted hover:text-text-main"
               >
                 Cancel
               </button>
               <button
-                type="button"
-                disabled={deleteMutation.isPending}
-                data-testid="btn-confirm-delete"
-                onClick={() => deleteMutation.mutate(deletingProduct.id)}
-                className="bg-failed hover:bg-failed/90 text-white px-5 py-2 rounded-lg text-sm font-semibold transition-all shadow-sm cursor-pointer disabled:opacity-50"
+                onClick={() => restockMutation.mutate({ id: restockProduct.id, qty: parseInt(restockQty) || 10 })}
+                className="px-3 py-1.5 rounded bg-interactive/15 border border-interactive/50 text-interactive hover:bg-interactive/25 font-bold"
               >
-                {deleteMutation.isPending ? "Deleting..." : "Confirm Delete"}
+                Confirm Restock
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border pb-3">
+        <div>
+          <h1 className="heading text-xl font-bold text-text-main tracking-tight flex items-center gap-2">
+            <Package size={18} className="text-interactive" />
+            Inventory Stock Ledger & Saga Locks
+          </h1>
+          <p className="text-xs text-text-muted mt-0.5">
+            Distributed stock reservation and automated rollback compensation managed by <code>inventory-service</code>
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 text-xs">
+          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-card border border-border text-success font-semibold">
+            <ShieldCheck size={13} className="text-success" />
+            ISOLATED POSTGRESQL INSTANCE
+          </span>
+        </div>
+      </div>
+
+      {/* Metric Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+        <div className="p-3 rounded bg-panel border border-border space-y-1">
+          <div className="flex items-center justify-between text-text-dim text-[11px]">
+            <span>TOTAL POSTGRES STOCK</span>
+            <Layers size={14} className="text-interactive" />
+          </div>
+          <div className="text-lg font-bold text-text-main tech-data">{totalStock} Units</div>
+          <div className="text-[10px] text-text-muted">Aggregated across all catalog SKUs</div>
+        </div>
+
+        <div className="p-3 rounded bg-panel border border-border space-y-1">
+          <div className="flex items-center justify-between text-text-dim text-[11px]">
+            <span>AVAILABLE (UNLOCKED)</span>
+            <CheckCircle2 size={14} className="text-success" />
+          </div>
+          <div className="text-lg font-bold text-success tech-data">{totalAvailable} Units</div>
+          <div className="text-[10px] text-text-muted">Available for incoming checkout reservations</div>
+        </div>
+
+        <div className="p-3 rounded bg-panel border border-border space-y-1">
+          <div className="flex items-center justify-between text-text-dim text-[11px]">
+            <span>RESERVED (SAGA LOCKS)</span>
+            <RotateCcw size={14} className="text-interactive" />
+          </div>
+          <div className="text-lg font-bold text-interactive tech-data">{totalReserved} Units</div>
+          <div className="text-[10px] text-text-muted">Subject to auto-rollback upon payment timeout/failure</div>
+        </div>
+      </div>
+
+      {/* Rollback Compensation Architecture Banner */}
+      <div className="p-3 rounded bg-card/60 border border-border text-xs space-y-1">
+        <div className="flex items-center gap-2 text-interactive font-bold">
+          <History size={14} />
+          <span>SAGA TWO-PHASE ROLLBACK ARCHITECTURE IN INVENTORY:</span>
+        </div>
+        <p className="text-[11px] text-text-muted leading-relaxed">
+          When an order is initialized, <code>inventory-service</code> increments <code>stock_reserved</code> and decrements <code>stock_available</code> within a PostgreSQL ACID transaction. 
+          If a <code>payment.failed</code> NATS JetStream event arrives, the consumer instantly triggers a compensatory transaction: 
+          <code>stock_reserved</code> is restored back into <code>stock_available</code> without human intervention.
+        </p>
+      </div>
+
+      {/* Search & Actions Bar */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-2">
+        <div className="relative w-full sm:w-72">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search SKU name, component..."
+            className="w-full bg-panel border border-border rounded px-3 py-1.5 text-xs text-text-main focus:outline-none focus:border-interactive pl-8"
+          />
+          <Search size={13} className="absolute left-2.5 top-2 text-text-dim" />
+        </div>
+        <div className="text-[11px] text-text-dim">
+          Showing {filteredProducts.length} hardware items
+        </div>
+      </div>
+
+      {/* Inventory Stock Table */}
+      <div className="rounded bg-panel border border-border overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead className="bg-card/70 border-b border-border text-[10px] text-text-dim uppercase">
+              <tr>
+                <th className="py-2.5 px-3">Hardware Component SKU</th>
+                <th className="py-2.5 px-3">Price (IDR)</th>
+                <th className="py-2.5 px-3 text-center">Total Stock</th>
+                <th className="py-2.5 px-3 text-center">Available Stock</th>
+                <th className="py-2.5 px-3 text-center">Reserved (Saga Lock)</th>
+                <th className="py-2.5 px-3 text-center">Health Status</th>
+                <th className="py-2.5 px-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/60">
+              {filteredProducts.map((p) => {
+                const isLow = p.stock_available <= 5;
+                const hasLocks = p.stock_reserved > 0;
+
+                return (
+                  <tr key={p.id} className="hover:bg-card/80 transition-colors">
+                    <td className="py-2.5 px-3">
+                      <div className="font-semibold text-text-main">{p.name}</div>
+                      <div className="text-[10px] text-text-dim font-mono">{p.id}</div>
+                    </td>
+                    <td className="py-2.5 px-3 font-semibold text-text-main">
+                      Rp {p.price.toLocaleString("id-ID")}
+                    </td>
+                    <td className="py-2.5 px-3 text-center font-bold text-text-main">
+                      {p.stock}
+                    </td>
+                    <td className="py-2.5 px-3 text-center font-bold text-success">
+                      {p.stock_available}
+                    </td>
+                    <td className="py-2.5 px-3 text-center font-bold text-interactive">
+                      <span className={clsx("px-1.5 py-0.5 rounded border text-[11px]", hasLocks ? "bg-interactive/15 border-interactive/40 text-interactive" : "border-border text-text-dim")}>
+                        {p.stock_reserved}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 text-center">
+                      <span className={clsx(
+                        "text-[10px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider",
+                        isLow ? "bg-failed/15 border-failed/40 text-failed" : "bg-success/15 border-success/40 text-success"
+                      )}>
+                        {isLow ? "LOW STOCK" : "OPTIMAL"}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 text-right">
+                      <button
+                        onClick={() => setRestockProduct(p)}
+                        className="px-2.5 py-1 rounded bg-card border border-border text-text-muted hover:text-text-main hover:border-interactive transition-colors text-[11px] font-semibold"
+                      >
+                        Restock
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }

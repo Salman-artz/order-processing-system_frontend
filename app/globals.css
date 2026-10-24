@@ -1,38 +1,126 @@
 @import "tailwindcss";
 
+:root {
+  --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: var(--font-jetbrains), "JetBrains Mono", SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-heading: var(--font-space), "Space Grotesk", sans-serif;
+
+  /* Titanium Gunmetal Dark Mode (Default) */
+  --bg-page: #0F1115;
+  --bg-panel: #161920;
+  --bg-card: #1C2029;
+  --bg-card-hover: #232834;
+  --border-color: #262B35;
+  --border-subtle: #1E232C;
+
+  --text-main: #F1F5F9;
+  --text-muted: #94A3B8;
+  --text-dim: #64748B;
+
+  /* Semantic Disciplined Colors */
+  --color-success: #10B981;
+  --color-success-bg: rgba(16, 185, 129, 0.12);
+  --color-success-border: rgba(16, 185, 129, 0.35);
+
+  --color-pending: #F59E0B;
+  --color-pending-bg: rgba(245, 158, 11, 0.12);
+  --color-pending-border: rgba(245, 158, 11, 0.35);
+
+  --color-failed: #EF4444;
+  --color-failed-bg: rgba(239, 68, 68, 0.12);
+  --color-failed-border: rgba(239, 68, 68, 0.35);
+
+  /* Industrial Amber Accent */
+  --color-interactive: #F59E0B;
+  --color-interactive-hover: #D97706;
+  --color-interactive-bg: rgba(245, 158, 11, 0.12);
+
+  --color-slate-badge: #334155;
+}
+
+html.light, :root.light {
+  /* Canvas Warm White Titanium Light Mode */
+  --bg-page: #F8F9FA;
+  --bg-panel: #FFFFFF;
+  --bg-card: #F1F3F5;
+  --bg-card-hover: #E9ECEF;
+  --border-color: #E2E8F0;
+  --border-subtle: #EDF2F7;
+
+  --text-main: #0F172A;
+  --text-muted: #475569;
+  --text-dim: #94A3B8;
+
+  --color-success: #059669;
+  --color-success-bg: rgba(5, 150, 105, 0.1);
+  --color-success-border: rgba(5, 150, 105, 0.3);
+
+  --color-pending: #D97706;
+  --color-pending-bg: rgba(217, 119, 6, 0.1);
+  --color-pending-border: rgba(217, 119, 6, 0.3);
+
+  --color-failed: #DC2626;
+  --color-failed-bg: rgba(220, 38, 38, 0.1);
+  --color-failed-border: rgba(220, 38, 38, 0.3);
+
+  --color-interactive: #D97706;
+  --color-interactive-hover: #B45309;
+  --color-interactive-bg: rgba(217, 119, 6, 0.1);
+
+  --color-slate-badge: #E2E8F0;
+}
+
 @theme {
-  --font-sans: var(--font-inter);
-  --font-mono: var(--font-jetbrains);
-  --font-heading: var(--font-space);
-
-  --color-background: #0B1120;
-  --color-panel: #131B2E;
-  --color-border: #1F2A44;
+  --color-background: var(--bg-page);
+  --color-panel: var(--bg-panel);
+  --color-card: var(--bg-card);
+  --color-card-hover: var(--bg-card-hover);
+  --color-border: var(--border-color);
   
-  --color-text-main: #E8ECF4;
-  --color-text-muted: #8B95A8;
+  --color-text-main: var(--text-main);
+  --color-text-muted: var(--text-muted);
+  --color-text-dim: var(--text-dim);
   
-  --color-success: #2DD4BF;
-  --color-pending: #F5A623;
-  --color-failed: #F0453D;
-  --color-interactive: #6366F1;
-
-  --radius-sm: 6px;
-  --radius-md: 8px;
+  --color-success: var(--color-success);
+  --color-pending: var(--color-pending);
+  --color-failed: var(--color-failed);
+  --color-interactive: var(--color-interactive);
 }
 
 @layer base {
+  * {
+    border-color: var(--border-color);
+  }
   body {
-    background-color: var(--color-background);
-    color: var(--color-text-main);
+    background-color: var(--bg-page);
+    color: var(--text-main);
     font-family: var(--font-sans);
+    overflow: hidden;
   }
 }
 
 .heading {
   font-family: var(--font-heading);
+  letter-spacing: -0.02em;
 }
 
 .tech-data {
   font-family: var(--font-mono);
+  font-feature-settings: "tnum" 1, "zero" 1;
+}
+
+/* Custom crisp scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-dim);
 }

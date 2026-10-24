@@ -1,302 +1,548 @@
 "use client";
 
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { useQuery } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
-import api from "@/lib/api/client";
-import { Product } from "@/types";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { ProductService, ProductItem } from "@/services/product.service";
+import { OrderService } from "@/services/order.service";
+import { SagaService, SagaEventItem, MicroserviceNode, TraceSpan } from "@/services/saga.service";
+import TraceDrawer from "@/components/TraceDrawer";
+import { 
+  Package, 
+  ShoppingCart, 
+  AlertTriangle, 
+  CheckCircle2, 
+  ArrowRight, 
+  RotateCcw, 
+  Activity, 
+  Server, 
+  Terminal, 
+  Radio, 
+  Zap,
+  Info
+} from "lucide-react";
+import clsx from "clsx";
 import { toast } from "sonner";
 
-/* -------------------------------------------------------------------------- */
-/*  Mock products (matching actual inventory-service seed data)                */
-/* -------------------------------------------------------------------------- */
-const MOCK_PRODUCTS: Product[] = [
-  { id: "4120ce5d-ac77-45f1-bd50-c5bc5d2725ad", name: "GPU NVIDIA RTX 4090 24GB",                  price: 28500000, stock: 2,  description: "Flagship graphics card, PCIe 5.0" },
-  { id: "13ab7375-c7b2-4e83-8cc0-dfd981ed74d7", name: "Headphone Sony WH-1000XM5",                 price: 4500000,  stock: 20, description: "Noise-cancelling, 30h battery" },
-  { id: "79e5bb66-f451-4960-b144-1dc6af9866f1", name: "Laptop ASUS VivoBook 15 Core i5",           price: 8750000,  stock: 25, description: "Intel Core i5-1335U, 16GB RAM" },
-  { id: "6e37486f-7ce2-41c1-9046-a8f2d943006f", name: "Mechanical Keyboard Keychron K2 RGB",       price: 1350000,  stock: 40, description: "Wireless, hot-swap, TKL layout" },
-  { id: "cf217e3f-1cac-40f1-ae59-166e659c743a", name: "Monitor LG 24\" IPS Full HD",               price: 2850000,  stock: 15, description: "IPS panel, 75Hz, AMD FreeSync" },
-  { id: "eb824b0c-dca7-48b9-a72b-3448dd3627a2", name: "SSD External Samsung T7 1TB",               price: 1750000,  stock: 35, description: "USB 3.2 Gen 2, up to 1,050 MB/s" },
-  { id: "7edc8875-b3b2-4a04-acf3-5e57e501b431", name: "Standing Desk Ergonomic Motorized 140cm",   price: 5200000,  stock: 5,  description: "Electric height 70-120cm" },
-  { id: "aa43c0cd-7b4b-4cc1-b9a8-a9d5673f84f3", name: "USB-C Hub 7-in-1 Anker Premium",           price: 425000,   stock: 60, description: "4K HDMI, 100W PD, SD card" },
-  { id: "3bd14f9f-26b3-41c2-bb9a-461a7c4d37c6", name: "Webcam Logitech C920 HD Pro",               price: 1200000,  stock: 30, description: "1080p/30fps, stereo mic" },
-  { id: "74662fc9-4e84-42c9-b153-c72db4e6d3f0", name: "Wireless Mouse Logitech MX Master 3",       price: 950000,   stock: 80, description: "MagSpeed scroll, 70-day battery" },
-];
+export default function OperationsCockpitPage() {
+  const queryClient = useQueryClient();
 
-/* -------------------------------------------------------------------------- */
-/*  Zod schema — full validation for order form                               */
-/* -------------------------------------------------------------------------- */
-function makeSchema(product: Product | null) {
-  const maxQty = product?.stock ?? 1;
-  return z.object({
-    product_id: z.string().uuid("Please select a product"),
-    quantity: z
-      .number()
-      .int()
-      .min(1, "Quantity must be at least 1")
-      .max(maxQty, `Only ${maxQty} units in stock`),
-  });
-}
+  // Selected item in catalog
+  const [selectedProductId, setSelectedProductId] = useState<string>("4120ce5d-ac77-45f1-bd50-c5bc5d2725ad");
+  const [quantity, setQuantity] = useState<number>(1);
 
-type FormData = { product_id: string; quantity: number };
+  // Active Saga simulation states
+  const [activeSagaStep, setActiveSagaStep] = useState<number>(0);
+  const [isSimulating, setIsSimulating] = useState<boolean>(false);
+  const [simulatedFailure, setSimulatedFailure] = useState<boolean>(false);
+  const [lastCorrelationId, setLastCorrelationId] = useState<string>("corr-8f92-a104");
 
-/* -------------------------------------------------------------------------- */
-/*  Component                                                                   */
-/* -------------------------------------------------------------------------- */
-export default function ProductsPage() {
-  const router = useRouter();
+  // Trace Drawer states
+  const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
+  const [drawerOrderId, setDrawerOrderId] = useState<string>("ord-8f92a104");
+  const [drawerSpans, setDrawerSpans] = useState<TraceSpan[]>([]);
+  const [drawerPayload, setDrawerPayload] = useState<Record<string, any>>({});
 
-  const { data: products = [], isLoading, isError } = useQuery<Product[]>({
-    queryKey: ["products"],
-    queryFn: async () => {
-      if (process.env.NEXT_PUBLIC_USE_MOCK === "true") return MOCK_PRODUCTS;
-      const res = await api.get("/products");
-      // Backend returns { products: [], total: N }
-      return res.data.products ?? res.data;
-    },
-    retry: false,
+  // 1. Fetch Products via Domain Service (0 direct fetch in component)
+  const { data: products = [], isLoading: isProductsLoading } = useQuery<ProductItem[]>({
+    queryKey: ["products-cockpit"],
+    queryFn: () => ProductService.getProducts(),
     staleTime: 60_000,
   });
 
-  const {
-    register,
-    handleSubmit,
-    watch,
-    setValue,
-    setError,
-    clearErrors,
-    formState: { errors, isSubmitting },
-  } = useForm<FormData>({
-    defaultValues: { product_id: "", quantity: 1 },
+  // 2. Fetch Microservices Node status
+  const microservices = SagaService.getMicroservicesHealth();
+
+  // 3. Live Events stream state
+  const [events, setEvents] = useState<SagaEventItem[]>(SagaService.getSagaEvents());
+
+  const selectedProduct = products.find((p) => p.id === selectedProductId) || products[0] || null;
+  const totalPrice = (selectedProduct?.price || 0) * quantity;
+
+  // Order Mutation (Commit Flow)
+  const placeOrderMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedProduct) return;
+      setIsSimulating(true);
+      setSimulatedFailure(false);
+      setActiveSagaStep(1);
+
+      const res = await OrderService.createOrder({
+        items: [{ product_id: selectedProduct.id, quantity, price: selectedProduct.price }],
+      });
+      return res;
+    },
+    onSuccess: (order) => {
+      const corrId = `corr-${Math.random().toString(36).substring(2, 6)}-${Math.random().toString(36).substring(2, 6)}`;
+      setLastCorrelationId(corrId);
+
+      // Simulate Saga Choreography Steps progression
+      setTimeout(() => setActiveSagaStep(2), 500);  // inventory.reserved
+      setTimeout(() => setActiveSagaStep(3), 1100); // payment.success
+      setTimeout(() => {
+        setActiveSagaStep(4); // order.completed
+        setIsSimulating(false);
+        toast.success("Saga Choreography Committed!", {
+          description: `Order ${order?.id || "ORD-OK"} completed via NATS JetStream.`,
+        });
+
+        // Prepend fresh events to stream
+        const now = new Date();
+        const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}.${String(now.getMilliseconds()).padStart(3, "0")}`;
+        const freshEvents: SagaEventItem[] = [
+          {
+            id: `evt-${Date.now()}-1`,
+            timestamp: timeStr,
+            subject: "order.created",
+            correlationId: corrId,
+            serviceSource: "order-service",
+            status: "COMMITTED",
+            latencyMs: 12,
+            payload: { order_id: order?.id, customer_id: "usr-admin-01", total: totalPrice, items_count: quantity },
+          },
+          {
+            id: `evt-${Date.now()}-2`,
+            timestamp: timeStr,
+            subject: "inventory.reserved",
+            correlationId: corrId,
+            serviceSource: "inventory-service",
+            status: "COMMITTED",
+            latencyMs: 16,
+            payload: { order_id: order?.id, sku: selectedProduct?.name, quantity, stock_locked: quantity },
+          },
+          {
+            id: `evt-${Date.now()}-3`,
+            timestamp: timeStr,
+            subject: "payment.success",
+            correlationId: corrId,
+            serviceSource: "payment-service",
+            status: "COMMITTED",
+            latencyMs: 34,
+            payload: { order_id: order?.id, status: "SETTLED", gateway: "Midtrans Snap" },
+          },
+          {
+            id: `evt-${Date.now()}-4`,
+            timestamp: timeStr,
+            subject: "order.completed",
+            correlationId: corrId,
+            serviceSource: "order-service",
+            status: "COMMITTED",
+            latencyMs: 10,
+            payload: { order_id: order?.id, final_state: "COMPLETED" },
+          },
+        ];
+        setEvents((prev) => [...freshEvents, ...prev]);
+        queryClient.invalidateQueries({ queryKey: ["admin-products"] });
+      }, 1600);
+    },
+    onError: () => {
+      setIsSimulating(false);
+      toast.error("Failed to place order.");
+    },
   });
 
-  const selectedId  = watch("product_id");
-  const selectedQty = watch("quantity");
-  const selectedProduct = products.find((p) => p.id === selectedId) ?? null;
-  const total = (selectedProduct?.price ?? 0) * (selectedQty || 0);
+  // Simulate Failure Mutation (Rollback Flow)
+  const simulateFailureMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedProduct) return;
+      setIsSimulating(true);
+      setSimulatedFailure(true);
+      setActiveSagaStep(1);
 
-  const onSubmit = async (data: FormData) => {
-    clearErrors();
-    // Re-validate with product-specific max qty
-    const result = makeSchema(selectedProduct).safeParse(data);
-    if (!result.success) {
-      result.error.issues.forEach((e) => {
-        toast.error(e.message);
-        if (e.path.includes("quantity")) {
-          setError("quantity", { type: "manual", message: e.message });
-        }
-        if (e.path.includes("product_id")) {
-          setError("product_id", { type: "manual", message: e.message });
-        }
+      const res = await OrderService.simulateFailureOrder({
+        items: [{ product_id: selectedProduct.id, quantity, price: selectedProduct.price }],
       });
-      return;
-    }
+      return res;
+    },
+    onSuccess: (order) => {
+      const corrId = `corr-fail-${Math.random().toString(36).substring(2, 6)}`;
+      setLastCorrelationId(corrId);
 
-    if (!selectedProduct || selectedProduct.stock === 0) {
-      toast.error("Product is out of stock.");
-      return;
-    }
-
-    try {
-      if (process.env.NEXT_PUBLIC_USE_MOCK === "true") {
-        toast.success("Order placed!", {
-          description: `${selectedProduct.name} × ${data.quantity}`,
+      // Simulate Saga Rollback flow:
+      // 1: Order Created -> 2: Stock Reserved -> 3: Payment Failed -> 4: Compensation: Stock Released -> Order Cancelled
+      setTimeout(() => setActiveSagaStep(2), 500);  // inventory.reserved
+      setTimeout(() => setActiveSagaStep(3), 1100); // payment.failed
+      setTimeout(() => {
+        setActiveSagaStep(4); // stock compensated & order.cancelled
+        setIsSimulating(false);
+        toast.error("Saga Compensation Rollback Triggered!", {
+          description: "Payment threshold exceeded. Reserved stock unlocked back to inventory.",
         });
-        router.push(`/customer/orders/mock-order-${data.product_id.slice(0, 8)}`);
-        return;
-      }
 
-      const res = await api.post("/orders", {
-        items: [
+        const now = new Date();
+        const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}.${String(now.getMilliseconds()).padStart(3, "0")}`;
+        const freshEvents: SagaEventItem[] = [
           {
-            product_id: data.product_id,
-            quantity: data.quantity,
-            price: selectedProduct!.price,
+            id: `evt-${Date.now()}-f1`,
+            timestamp: timeStr,
+            subject: "order.created",
+            correlationId: corrId,
+            serviceSource: "order-service",
+            status: "PENDING",
+            latencyMs: 14,
+            payload: { order_id: order?.id, total: totalPrice, simulation: "LIMIT_EXCEEDED" },
           },
-        ],
-      });
-      toast.success("Order placed!", { description: `Order ID: ${res.data.order.id}` });
-      router.push(`/customer/orders/${res.data.order.id}`);
-    } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??
-        "Failed to place order.";
-      toast.error("Order failed", { description: msg });
-    }
+          {
+            id: `evt-${Date.now()}-f2`,
+            timestamp: timeStr,
+            subject: "inventory.reserved",
+            correlationId: corrId,
+            serviceSource: "inventory-service",
+            status: "COMMITTED",
+            latencyMs: 18,
+            payload: { order_id: order?.id, sku: selectedProduct?.name, stock_locked: quantity },
+          },
+          {
+            id: `evt-${Date.now()}-f3`,
+            timestamp: timeStr,
+            subject: "payment.failed",
+            correlationId: corrId,
+            serviceSource: "payment-service",
+            status: "ROLLBACK",
+            latencyMs: 48,
+            compensationReason: "Simulated balance limit exceeded (> Rp 10.000.000)",
+            payload: { order_id: order?.id, reason: "Transaction limit exceeded", gross_amount: totalPrice },
+          },
+          {
+            id: `evt-${Date.now()}-f4`,
+            timestamp: timeStr,
+            subject: "inventory.released",
+            correlationId: corrId,
+            serviceSource: "inventory-service",
+            status: "COMPENSATED",
+            latencyMs: 22,
+            compensationReason: `SAGA COMPENSATION: Released ${quantity}x lock on ${selectedProduct?.name} back to PostgreSQL`,
+            payload: { order_id: order?.id, action: "COMPENSATION_STOCK_RELEASE" },
+          },
+          {
+            id: `evt-${Date.now()}-f5`,
+            timestamp: timeStr,
+            subject: "order.cancelled",
+            correlationId: corrId,
+            serviceSource: "order-service",
+            status: "ROLLBACK",
+            latencyMs: 12,
+            payload: { order_id: order?.id, final_state: "CANCELLED", rollback: "SUCCESSFUL" },
+          },
+        ];
+        setEvents((prev) => [...freshEvents, ...prev]);
+      }, 1700);
+    },
+    onError: () => {
+      setIsSimulating(false);
+      toast.error("Simulation trigger failed.");
+    },
+  });
+
+  const handleOpenTrace = (orderId: string, corrId: string, payload?: Record<string, any>) => {
+    setDrawerOrderId(orderId);
+    setDrawerSpans(SagaService.getTraceForOrder(orderId));
+    setDrawerPayload(payload || { order_id: orderId, correlation_id: corrId });
+    setIsDrawerOpen(true);
   };
 
-  /* ---------------------------------------------------------------------- */
-  /*  States                                                                  */
-  /* ---------------------------------------------------------------------- */
-  if (isLoading) {
-    return (
-      <div data-testid="products-loading" className="space-y-4 animate-pulse">
-        <div className="h-8 bg-panel rounded w-48" />
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-44 bg-panel rounded-md border border-border" />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (isError) {
-    return (
-      <div data-testid="products-error" className="bg-failed/10 border border-failed/30 rounded-md p-6 text-failed">
-        Failed to load products. Make sure the backend is running or enable mock mode.
-      </div>
-    );
-  }
-
-  /* ---------------------------------------------------------------------- */
-  /*  Render                                                                  */
-  /* ---------------------------------------------------------------------- */
   return (
-    <div className="space-y-8">
-      <div className="flex justify-between items-center">
-        <h1 className="heading text-2xl font-bold">Product Catalog</h1>
-        <span className="tech-data text-xs text-text-muted">
-          {products.length} products
-        </span>
-      </div>
+    <div className="h-full flex flex-col gap-3 select-none overflow-hidden">
+      {/* Trace Drawer */}
+      <TraceDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        orderId={drawerOrderId}
+        correlationId={lastCorrelationId}
+        traceSpans={drawerSpans}
+        rawPayload={drawerPayload}
+      />
 
-      {/* Product Grid */}
-      <div data-testid="products-grid" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {products.map((product) => {
-          const isSelected = product.id === selectedId;
-          const isOutOfStock = product.stock === 0;
+      {/* Main Split Workbench: Panel Kiri (Storefront) & Panel Kanan (Telemetry + Stream) */}
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-3 min-h-0 overflow-hidden">
+        {/* ========================================================================= */}
+        {/* PANEL KIRI (5 Columns): Catalog, Cart, and Execution Buttons              */}
+        {/* ========================================================================= */}
+        <section className="lg:col-span-5 flex flex-col h-full bg-panel border border-border rounded overflow-hidden">
+          {/* Header */}
+          <div className="p-3 border-b border-border bg-card/40 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <ShoppingCart size={15} className="text-interactive" />
+              <h2 className="tech-data font-bold text-xs uppercase tracking-tight text-text-main">
+                Customer Storefront & Saga Trigger
+              </h2>
+            </div>
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-background border border-border text-text-dim">
+              POSTGRES LEDGER
+            </span>
+          </div>
 
-          return (
-            <button
-              key={product.id}
-              data-testid={`product-card-${product.id}`}
-              type="button"
-              disabled={isOutOfStock}
-              onClick={() => {
-                setValue("product_id", product.id, { shouldValidate: true });
-                setValue("quantity", 1, { shouldValidate: true });
-              }}
-              aria-pressed={isSelected}
-              className={[
-                "text-left bg-panel border rounded-md p-5 flex flex-col transition-all duration-200",
-                "focus:outline-none focus:ring-2 focus:ring-interactive focus:ring-offset-2 focus:ring-offset-background",
-                isSelected ? "border-interactive ring-1 ring-interactive" : "border-border hover:border-interactive/50",
-                isOutOfStock ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
-              ].join(" ")}
-            >
-              <h3 className="heading text-sm font-bold line-clamp-2 leading-snug">{product.name}</h3>
-              <p className="text-text-muted text-xs mt-1.5 flex-1 line-clamp-2">{product.description}</p>
+          {/* Catalog List (Scrollable) */}
+          <div className="flex-1 overflow-y-auto p-3 space-y-2">
+            <div className="text-[10px] font-mono text-text-dim uppercase tracking-wider flex justify-between px-1">
+              <span>Hardware SKU / Component</span>
+              <span>Available / Reserved Stock</span>
+            </div>
 
-              <div className="mt-4 flex items-end justify-between">
-                <span className="tech-data text-success font-bold">
-                  Rp {product.price.toLocaleString("id-ID")}
-                </span>
-                <span
-                  className={`tech-data text-[10px] px-2 py-0.5 rounded border ${
-                    isOutOfStock
-                      ? "text-failed border-failed/30 bg-failed/10"
-                      : product.stock <= 5
-                      ? "text-pending border-pending/30 bg-pending/10"
-                      : "text-success/80 border-success/20 bg-success/5"
-                  }`}
+            {products.map((p) => {
+              const isSelected = selectedProductId === p.id;
+              return (
+                <div
+                  key={p.id}
+                  onClick={() => setSelectedProductId(p.id)}
+                  className={clsx(
+                    "p-2.5 rounded border transition-all cursor-pointer font-mono text-xs flex items-center justify-between",
+                    isSelected
+                      ? "bg-card border-interactive shadow-xs text-text-main"
+                      : "bg-card/40 border-border text-text-muted hover:border-interactive/40 hover:text-text-main"
+                  )}
                 >
-                  {isOutOfStock ? "Out of stock" : `${product.stock} in stock`}
+                  <div className="space-y-0.5 max-w-[65%]">
+                    <div className="font-semibold text-xs truncate text-text-main flex items-center gap-1.5">
+                      {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-interactive shrink-0" />}
+                      <span className="truncate">{p.name}</span>
+                    </div>
+                    <p className="text-[10px] text-text-dim truncate">{p.description}</p>
+                    <div className="text-interactive font-bold text-xs pt-0.5">
+                      Rp {p.price.toLocaleString("id-ID")}
+                    </div>
+                  </div>
+
+                  {/* Stock Metrics */}
+                  <div className="text-right space-y-0.5 shrink-0">
+                    <div className="text-[11px] font-bold text-success">
+                      {p.stock_available} <span className="text-[10px] font-normal text-text-dim">avail</span>
+                    </div>
+                    <div className="text-[10px] text-interactive font-mono">
+                      {p.stock_reserved} <span className="text-text-dim">locked</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Cart Summary & Order Action Buttons */}
+          <div className="p-3 border-t border-border bg-card/30 space-y-2.5 shrink-0">
+            {/* Quantity Selector */}
+            <div className="flex items-center justify-between text-xs font-mono">
+              <span className="text-text-muted">Quantity Allocation:</span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                  className="w-6 h-6 rounded bg-card border border-border flex items-center justify-center font-bold hover:border-interactive transition-colors"
+                >
+                  -
+                </button>
+                <span className="w-8 text-center font-bold text-text-main">{quantity}</span>
+                <button
+                  onClick={() => setQuantity((q) => Math.min(selectedProduct?.stock_available || 10, q + 1))}
+                  className="w-6 h-6 rounded bg-card border border-border flex items-center justify-center font-bold hover:border-interactive transition-colors"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
+            {/* Total calculation */}
+            <div className="p-2.5 rounded bg-background border border-border flex items-center justify-between font-mono text-xs">
+              <span className="text-text-muted">Estimated Settlement Total:</span>
+              <span className="text-sm font-bold text-interactive tech-data">
+                Rp {totalPrice.toLocaleString("id-ID")}
+              </span>
+            </div>
+
+            {/* Action Buttons: Place Order vs Simulate Failure */}
+            <div className="grid grid-cols-2 gap-2 font-mono text-xs">
+              {/* Normal Flow */}
+              <button
+                disabled={isSimulating}
+                onClick={() => placeOrderMutation.mutate()}
+                className={clsx(
+                  "py-2.5 px-3 rounded font-bold border transition-all flex items-center justify-center gap-1.5",
+                  isSimulating
+                    ? "bg-card border-border text-text-dim cursor-not-allowed"
+                    : "bg-success/15 border-success/50 text-success hover:bg-success/25 hover:border-success"
+                )}
+              >
+                <CheckCircle2 size={14} />
+                <span>Place Order (Commit)</span>
+              </button>
+
+              {/* Force Rollback Failure */}
+              <button
+                disabled={isSimulating}
+                onClick={() => simulateFailureMutation.mutate()}
+                className={clsx(
+                  "py-2.5 px-3 rounded font-bold border transition-all flex items-center justify-center gap-1.5",
+                  isSimulating
+                    ? "bg-card border-border text-text-dim cursor-not-allowed"
+                    : "bg-failed/15 border-failed/50 text-failed hover:bg-failed/25 hover:border-failed"
+                )}
+              >
+                <RotateCcw size={14} />
+                <span>Simulate Failure</span>
+              </button>
+            </div>
+
+            <div className="text-[10px] font-mono text-text-dim text-center">
+              * Click "Simulate Failure" to trigger immediate Saga Compensation & Inventory Rollback
+            </div>
+          </div>
+        </section>
+
+        {/* ========================================================================= */}
+        {/* PANEL KANAN (7 Columns): Microservices Health & Real-time Event Stream    */}
+        {/* ========================================================================= */}
+        <section className="lg:col-span-7 flex flex-col h-full gap-3 min-h-0 overflow-hidden">
+          {/* PANEL KANAN ATAS: Microservices Topology & Live Saga Progress */}
+          <div className="bg-panel border border-border rounded p-3 shrink-0 space-y-2.5">
+            <div className="flex items-center justify-between text-xs font-mono">
+              <span className="font-bold text-text-main flex items-center gap-1.5">
+                <Server size={14} className="text-interactive" />
+                DISTRIBUTED MICROSERVICES TOPOLOGY (NATS EVENT BUS)
+              </span>
+              <span className="text-[10px] text-text-muted">
+                Correlation ID: <strong className="text-interactive font-mono">{lastCorrelationId}</strong>
+              </span>
+            </div>
+
+            {/* 4 Microservices Nodes Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 font-mono text-xs">
+              {microservices.map((node, index) => {
+                const isActiveHop = isSimulating && activeSagaStep === index + 1;
+                return (
+                  <div
+                    key={node.id}
+                    className={clsx(
+                      "p-2 rounded border transition-all bg-card/60",
+                      isActiveHop ? "border-interactive bg-interactive/10 shadow-xs" : "border-border"
+                    )}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] font-bold text-text-main truncate">{node.name}</span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-success shrink-0" />
+                    </div>
+                    <div className="text-[10px] text-text-dim flex justify-between">
+                      <span>Port {node.port}</span>
+                      <span className="text-text-main font-semibold">{node.latency}</span>
+                    </div>
+                    <div className="text-[9px] text-text-muted mt-1 truncate">
+                      {node.database}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Live Saga Progress Indicator */}
+            <div className="p-2.5 rounded bg-background border border-border font-mono text-xs space-y-1.5">
+              <div className="flex items-center justify-between text-[10px] text-text-dim uppercase tracking-wider">
+                <span>Choreography Transaction Progress:</span>
+                <span className={clsx("font-bold", simulatedFailure ? "text-failed" : "text-success")}>
+                  {isSimulating ? "IN FLIGHT..." : simulatedFailure ? "ROLLBACK COMPLETED" : "READY / COMMITTED"}
                 </span>
               </div>
-            </button>
-          );
-        })}
-      </div>
 
-      {/* Order Form */}
-      {selectedProduct && (
-        <form
-          onSubmit={handleSubmit(onSubmit)}
-          noValidate
-          data-testid="order-form"
-          className="bg-panel border border-border rounded-md p-6 space-y-5"
-        >
-          <h2 className="heading text-lg font-bold">Place Order</h2>
-
-          {/* Product summary */}
-          <div className="bg-background border border-border rounded-md p-4 space-y-1">
-            <p className="font-semibold">{selectedProduct.name}</p>
-            <p className="tech-data text-xs text-text-muted">{selectedProduct.id}</p>
-            <p className="tech-data text-success text-sm mt-2">
-              Rp {selectedProduct.price.toLocaleString("id-ID")} / unit
-            </p>
-          </div>
-
-          {/* Hidden product_id field */}
-          <input type="hidden" {...register("product_id")} />
-          {errors.product_id && (
-            <p role="alert" className="text-xs text-failed">{errors.product_id.message}</p>
-          )}
-
-          {/* Quantity */}
-          <div>
-            <label htmlFor="qty-input" className="block text-sm font-medium mb-1">
-              Quantity
-              <span className="ml-2 tech-data text-xs text-text-muted">
-                (max: {selectedProduct.stock})
-              </span>
-            </label>
-            <input
-              id="qty-input"
-              data-testid="input-quantity"
-              type="number"
-              min={1}
-              max={selectedProduct.stock}
-              {...register("quantity", { valueAsNumber: true })}
-              className={[
-                "w-full max-w-[140px] bg-background border rounded-md px-3 py-2 text-text-main tech-data",
-                "focus:outline-none focus:ring-2 focus:ring-interactive focus:ring-offset-1 focus:ring-offset-panel",
-                errors.quantity ? "border-failed" : "border-border",
-              ].join(" ")}
-            />
-            {errors.quantity && (
-              <p role="alert" data-testid="error-quantity" className="mt-1 text-xs text-failed">{errors.quantity.message}</p>
-            )}
-          </div>
-
-          {/* Total preview */}
-          {selectedQty > 0 && !errors.quantity && (
-            <div data-testid="text-order-total" className="flex items-center gap-3 text-sm">
-              <span className="text-text-muted">Order total:</span>
-              <span className="tech-data text-success font-bold text-lg">
-                Rp {total.toLocaleString("id-ID")}
-              </span>
-              {total >= 10_000_000 && (
-                <span className="text-xs text-pending">
-                  ⚠ Exceeds Rp 10M — payment may be auto-declined
-                </span>
-              )}
+              {/* Progress Stepper Bar */}
+              <div className="grid grid-cols-4 gap-1.5 text-center">
+                <div className={clsx("p-1.5 rounded border text-[10px]", activeSagaStep >= 1 ? "bg-card border-success text-success font-bold" : "border-border text-text-dim")}>
+                  1. OrderCreated
+                </div>
+                <div className={clsx("p-1.5 rounded border text-[10px]", activeSagaStep >= 2 ? "bg-card border-success text-success font-bold" : "border-border text-text-dim")}>
+                  2. StockReserved
+                </div>
+                <div className={clsx("p-1.5 rounded border text-[10px]", 
+                  activeSagaStep >= 3 
+                    ? (simulatedFailure ? "bg-failed/15 border-failed text-failed font-bold" : "bg-card border-success text-success font-bold") 
+                    : "border-border text-text-dim"
+                )}>
+                  3. {simulatedFailure ? "PaymentFailed" : "PaymentSuccess"}
+                </div>
+                <div className={clsx("p-1.5 rounded border text-[10px]", 
+                  activeSagaStep >= 4 
+                    ? (simulatedFailure ? "bg-card border-interactive text-interactive font-bold" : "bg-card border-success text-success font-bold") 
+                    : "border-border text-text-dim"
+                )}>
+                  4. {simulatedFailure ? "StockRollback" : "OrderCompleted"}
+                </div>
+              </div>
             </div>
-          )}
+          </div>
 
-          <button
-            type="submit"
-            data-testid="btn-confirm-order"
-            disabled={isSubmitting || selectedProduct.stock === 0}
-            className="bg-interactive text-white py-2 px-6 rounded-md font-medium
-                       hover:bg-interactive/90 transition-colors
-                       focus:outline-none focus:ring-2 focus:ring-interactive focus:ring-offset-2 focus:ring-offset-panel
-                       disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isSubmitting ? "Placing order…" : "Confirm Order"}
-          </button>
-        </form>
-      )}
+          {/* PANEL KANAN BAWAH: Real-time Event Stream Table (Scrollable) */}
+          <div className="flex-1 bg-panel border border-border rounded flex flex-col min-h-0 overflow-hidden">
+            <div className="p-2.5 border-b border-border bg-card/40 flex items-center justify-between shrink-0 font-mono text-xs">
+              <div className="flex items-center gap-2">
+                <Terminal size={14} className="text-interactive" />
+                <span className="font-bold text-text-main uppercase tracking-tight">
+                  Real-time NATS JetStream Event Stream
+                </span>
+              </div>
+              <span className="text-[10px] text-text-muted">
+                Click any row to inspect <strong className="text-interactive">Trace & JSON Payload</strong>
+              </span>
+            </div>
 
-      {products.length === 0 && (
-        <div data-testid="empty-products-state" className="text-center py-16 text-text-muted">
-          <p className="heading text-lg">No products available</p>
-          <p className="text-sm mt-1">Check back later or contact support.</p>
-        </div>
-      )}
+            {/* Stream Table */}
+            <div className="flex-1 overflow-y-auto">
+              <table className="w-full text-left font-mono text-xs border-collapse">
+                <thead className="bg-card/70 border-b border-border text-[10px] text-text-dim uppercase sticky top-0 z-10">
+                  <tr>
+                    <th className="py-2 px-3">Timestamp</th>
+                    <th className="py-2 px-3">Event Topic / Subject</th>
+                    <th className="py-2 px-3">Correlation ID</th>
+                    <th className="py-2 px-3">Publisher Node</th>
+                    <th className="py-2 px-3 text-right">Saga State</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {events.map((evt) => {
+                    const isRollback = evt.status === "ROLLBACK";
+                    const isCompensated = evt.status === "COMPENSATED";
+                    const isCommitted = evt.status === "COMMITTED";
+
+                    return (
+                      <tr
+                        key={evt.id}
+                        onClick={() => handleOpenTrace(evt.payload?.order_id || "ord-8f92a104", evt.correlationId, evt.payload)}
+                        className="hover:bg-card/80 cursor-pointer transition-colors"
+                      >
+                        <td className="py-2 px-3 text-text-muted text-[11px] whitespace-nowrap">
+                          {evt.timestamp}
+                        </td>
+                        <td className="py-2 px-3 font-semibold text-text-main whitespace-nowrap">
+                          <code className={clsx(
+                            "px-1 py-0.5 rounded text-[11px] border",
+                            isRollback ? "bg-failed/10 border-failed/30 text-failed" :
+                            isCompensated ? "bg-interactive/10 border-interactive/30 text-interactive" :
+                            "bg-background border-border text-text-main"
+                          )}>
+                            {evt.subject}
+                          </code>
+                        </td>
+                        <td className="py-2 px-3 text-text-dim text-[11px] truncate max-w-[120px]">
+                          {evt.correlationId}
+                        </td>
+                        <td className="py-2 px-3 text-text-muted text-[11px]">
+                          {evt.serviceSource}
+                        </td>
+                        <td className="py-2 px-3 text-right whitespace-nowrap">
+                          <span
+                            className={clsx(
+                              "text-[10px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider",
+                              isCommitted ? "bg-success/15 border-success/40 text-success" :
+                              isRollback ? "bg-failed/15 border-failed/40 text-failed" :
+                              isCompensated ? "bg-interactive/15 border-interactive/40 text-interactive" :
+                              "bg-card border-border text-text-muted"
+                            )}
+                          >
+                            {evt.status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </div>
     </div>
   );
 }

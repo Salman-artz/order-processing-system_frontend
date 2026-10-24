@@ -1,6 +1,7 @@
 "use client";
 
 import Sidebar from "@/components/Sidebar";
+import Header from "@/components/Header";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -15,23 +16,22 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
   }, []);
 
   useEffect(() => {
-    if (mounted) {
-      if (!user) {
-        router.push("/login");
-      } else if (user.role === "ADMIN") {
-        router.push("/admin/dashboard");
-      }
+    if (mounted && !user) {
+      router.push("/login");
     }
   }, [mounted, user, router]);
 
-  if (!mounted || !user || user.role === "ADMIN") return null;
+  if (!mounted || !user) return null;
 
   return (
-    <div data-testid="customer-layout" className="flex h-screen w-full overflow-hidden">
-      <Sidebar />
-      <main className="flex-1 overflow-y-auto bg-background p-6">
-        {children}
-      </main>
+    <div data-testid="customer-layout" className="flex flex-col h-screen w-full overflow-hidden bg-background">
+      <Header />
+      <div className="flex flex-1 h-[calc(100vh-3.5rem)] overflow-hidden">
+        <Sidebar />
+        <main className="flex-1 overflow-hidden bg-background p-4">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }
