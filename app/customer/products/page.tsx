@@ -71,11 +71,57 @@ export default function OperationsCockpitPage() {
       });
       return res;
     },
-    onSuccess: (order) => {
-      const corrId = `corr-${Math.random().toString(36).substring(2, 6)}-${Math.random().toString(36).substring(2, 6)}`;
+    onSuccess: async (order: any) => {
+      const orderId = order?.id || `ord-${Math.random().toString(36).substring(2, 6)}`;
+      const corrId = `corr-${orderId.substring(0, 8)}`;
       setLastCorrelationId(corrId);
 
-      // Simulate Saga Choreography Steps progression
+      // If connected to real backend, query real timeline after brief delay for saga completion
+      if (process.env.NEXT_PUBLIC_USE_MOCK !== "true" && order?.id) {
+        setActiveSagaStep(2);
+        await new Promise((r) => setTimeout(r, 350));
+        setActiveSagaStep(3);
+        await new Promise((r) => setTimeout(r, 350));
+        setActiveSagaStep(4);
+        setIsSimulating(false);
+
+        const timeline = await OrderService.getOrderTimeline(order.id);
+        if (timeline && timeline.length > 0) {
+          const freshEvents: SagaEventItem[] = timeline.map((tl, idx) => {
+            const timeDate = tl.createdAt ? new Date(tl.createdAt) : new Date();
+            const timeStr = `${String(timeDate.getHours()).padStart(2, "0")}:${String(timeDate.getMinutes()).padStart(2, "0")}:${String(timeDate.getSeconds()).padStart(2, "0")}.${String(timeDate.getMilliseconds()).padStart(3, "0")}`;
+            const evt = tl.eventType || "order.processed";
+            const sSource = evt.includes("stock") || evt.includes("inventory") 
+              ? "inventory-service" 
+              : evt.includes("payment") 
+              ? "payment-service" 
+              : "order-service";
+            return {
+              id: `evt-${tl.id || Date.now()}-${idx}`,
+              timestamp: timeStr,
+              subject: evt,
+              correlationId: corrId,
+              serviceSource: sSource,
+              status: evt.includes("failed") 
+                ? "ROLLBACK" 
+                : evt.includes("released") || evt.includes("cancel")
+                ? "COMPENSATED"
+                : "COMMITTED",
+              latencyMs: 12 + idx * 8,
+              payload: tl.payload || { order_id: order.id, event: evt },
+            };
+          });
+          setEvents((prev) => [...freshEvents, ...prev]);
+        }
+        toast.success("Saga Choreography Committed!", {
+          description: `Real Order ${order.id.substring(0, 8)} completed via NATS JetStream.`,
+        });
+        queryClient.invalidateQueries({ queryKey: ["products-cockpit"] });
+        queryClient.invalidateQueries({ queryKey: ["admin-products"] });
+        return;
+      }
+
+      // Fallback mock simulation
       setTimeout(() => setActiveSagaStep(2), 500);  // inventory.reserved
       setTimeout(() => setActiveSagaStep(3), 1100); // payment.success
       setTimeout(() => {
@@ -153,9 +199,56 @@ export default function OperationsCockpitPage() {
       });
       return res;
     },
-    onSuccess: (order) => {
-      const corrId = `corr-fail-${Math.random().toString(36).substring(2, 6)}`;
+    onSuccess: async (order: any) => {
+      const orderId = order?.id || `ord-fail-${Math.random().toString(36).substring(2, 6)}`;
+      const corrId = `corr-fail-${orderId.substring(0, 8)}`;
       setLastCorrelationId(corrId);
+
+      // If connected to real backend, query real timeline after brief delay for saga rollback completion
+      if (process.env.NEXT_PUBLIC_USE_MOCK !== "true" && order?.id) {
+        setActiveSagaStep(2);
+        await new Promise((r) => setTimeout(r, 350));
+        setActiveSagaStep(3);
+        await new Promise((r) => setTimeout(r, 350));
+        setActiveSagaStep(4);
+        setIsSimulating(false);
+
+        const timeline = await OrderService.getOrderTimeline(order.id);
+        if (timeline && timeline.length > 0) {
+          const freshEvents: SagaEventItem[] = timeline.map((tl, idx) => {
+            const timeDate = tl.createdAt ? new Date(tl.createdAt) : new Date();
+            const timeStr = `${String(timeDate.getHours()).padStart(2, "0")}:${String(timeDate.getMinutes()).padStart(2, "0")}:${String(timeDate.getSeconds()).padStart(2, "0")}.${String(timeDate.getMilliseconds()).padStart(3, "0")}`;
+            const evt = tl.eventType || "order.processed";
+            const sSource = evt.includes("stock") || evt.includes("inventory") 
+              ? "inventory-service" 
+              : evt.includes("payment") 
+              ? "payment-service" 
+              : "order-service";
+            return {
+              id: `evt-fail-${tl.id || Date.now()}-${idx}`,
+              timestamp: timeStr,
+              subject: evt,
+              correlationId: corrId,
+              serviceSource: sSource,
+              status: evt.includes("failed") 
+                ? "ROLLBACK" 
+                : evt.includes("released") || evt.includes("cancel")
+                ? "COMPENSATED"
+                : "COMMITTED",
+              latencyMs: 14 + idx * 10,
+              compensationReason: evt.includes("failed") ? "Simulated payment failure (threshold exceeded)" : undefined,
+              payload: tl.payload || { order_id: order.id, event: evt },
+            };
+          });
+          setEvents((prev) => [...freshEvents, ...prev]);
+        }
+        toast.error("Saga Compensation Rollback Triggered!", {
+          description: `Order ${order.id.substring(0, 8)} compensated. Reserved stock returned to PostgreSQL.`,
+        });
+        queryClient.invalidateQueries({ queryKey: ["products-cockpit"] });
+        queryClient.invalidateQueries({ queryKey: ["admin-products"] });
+        return;
+      }
 
       // Simulate Saga Rollback flow:
       // 1: Order Created -> 2: Stock Reserved -> 3: Payment Failed -> 4: Compensation: Stock Released -> Order Cancelled

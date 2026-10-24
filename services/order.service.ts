@@ -133,7 +133,20 @@ export class OrderService {
     try {
       const res = await api.get('/orders');
       const list = res.data.orders ?? res.data;
-      return Array.isArray(list) ? list : MOCK_ORDERS_STORE;
+      if (Array.isArray(list)) {
+        return list.map((item: any) => ({
+          id: item.id,
+          userId: item.customer_id || item.userId,
+          status: item.status,
+          totalAmount: typeof item.total_amount === 'string' 
+            ? parseFloat(item.total_amount.replace(',', '.')) 
+            : Number(item.total_amount ?? item.totalAmount ?? 0),
+          items: item.items || [],
+          createdAt: item.created_at || item.createdAt,
+          updatedAt: item.updated_at || item.updatedAt,
+        }));
+      }
+      return MOCK_ORDERS_STORE;
     } catch {
       return MOCK_ORDERS_STORE;
     }
@@ -146,7 +159,20 @@ export class OrderService {
     try {
       const res = await api.get('/admin/orders');
       const list = res.data.orders ?? res.data;
-      return Array.isArray(list) ? list : MOCK_ORDERS_STORE;
+      if (Array.isArray(list)) {
+        return list.map((item: any) => ({
+          id: item.id,
+          userId: item.customer_id || item.userId,
+          status: item.status,
+          totalAmount: typeof item.total_amount === 'string' 
+            ? parseFloat(item.total_amount.replace(',', '.')) 
+            : Number(item.total_amount ?? item.totalAmount ?? 0),
+          items: item.items || [],
+          createdAt: item.created_at || item.createdAt,
+          updatedAt: item.updated_at || item.updatedAt,
+        }));
+      }
+      return MOCK_ORDERS_STORE;
     } catch {
       return MOCK_ORDERS_STORE;
     }
@@ -175,7 +201,23 @@ export class OrderService {
     try {
       const res = await api.get(`/admin/orders/${orderId}/timeline`);
       const list = res.data.timeline ?? res.data;
-      return Array.isArray(list) ? list : [];
+      if (Array.isArray(list)) {
+        return list.map((item: any) => ({
+          id: item.id,
+          orderId: item.order_id || item.orderId || orderId,
+          eventType: item.event_type || item.eventType,
+          status: (item.event_type || "").includes("failed") 
+            ? "FAILED" 
+            : (item.event_type || "").includes("released") || (item.event_type || "").includes("compensat")
+            ? "COMPENSATED" 
+            : (item.event_type || "").includes("cancelled")
+            ? "CANCELLED"
+            : "SUCCESS",
+          payload: item.payload,
+          createdAt: item.created_at || item.createdAt,
+        }));
+      }
+      return [];
     } catch {
       return [];
     }
