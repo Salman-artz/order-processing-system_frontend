@@ -87,8 +87,12 @@ export default function RegisterPage() {
   return (
     <div className="flex h-screen w-full items-center justify-center bg-background p-4">
       <div className="w-full max-w-md bg-panel p-8 rounded-md border border-border">
-        <h1 className="heading text-2xl font-bold text-success mb-1">Create Account</h1>
-        <p className="text-text-muted text-sm mb-6">Join the Order Processing System</p>
+        <div className="flex items-center gap-2 mb-3">
+          <img src="/brand/warehouseflow-icon.svg" alt="WarehouseFlow" className="w-7 h-7 object-contain" />
+          <span className="tech-data font-bold text-sm text-text-main">WarehouseFlow</span>
+        </div>
+        <h1 className="heading text-2xl font-bold text-text-main mb-1">Create Account</h1>
+        <p className="text-text-muted text-sm mb-6">Join WarehouseFlow Management & Fulfillment Platform</p>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
           {/* Name */}

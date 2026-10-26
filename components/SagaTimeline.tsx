@@ -26,17 +26,32 @@ const STEPS: Step[] = [
 
 function getActiveIndex(status: OrderStatus): number {
   switch (status) {
-    case "PENDING":   return 0;
-    case "RESERVED":  return 1;
-    case "PAID":      return 2;
-    case "COMPLETED": return 3;
-    case "CANCELLED": return 1; // Stock was reserved, then rolled back
-    default:          return 0;
+    case "PENDING":
+      return 0;
+    case "INVENTORY_RESERVED":
+    case "RESERVED":
+      return 1;
+    case "PAYMENT_PENDING":
+    case "PAID":
+    case "CONFIRMED":
+      return 2;
+    case "PICKING":
+    case "PACKED":
+    case "DISPATCHED":
+    case "COMPLETED":
+      return 3;
+    case "CANCELLED":
+    case "PAYMENT_FAILED":
+    case "COMPENSATION_PENDING":
+    case "COMPENSATION_FAILED":
+      return 1; // Stock was reserved, then rolled back
+    default:
+      return 0;
   }
 }
 
 export default function SagaTimeline({ status, compact = false }: SagaTimelineProps) {
-  const isCancelled = status === "CANCELLED";
+  const isCancelled = status === "CANCELLED" || status === "PAYMENT_FAILED" || status === "COMPENSATION_FAILED" || status === "COMPENSATION_PENDING";
   const activeIndex = getActiveIndex(status);
 
   if (compact) {

@@ -138,6 +138,47 @@ export class SagaService {
     return INITIAL_MICROSERVICES;
   }
 
+  static async getMicroservicesHealthAsync(): Promise<MicroserviceNode[]> {
+    const services = [
+      { id: "svc-order", name: "order-service", port: 8085, url: "/health", database: "pg_orders (ACID)", type: "Presentation & State" },
+      { id: "svc-inventory", name: "inventory-service", port: 8081, url: "http://localhost:8081/health", database: "pg_inventory (Locks)", type: "Stock Ledger & Saga" },
+      { id: "svc-payment", name: "payment-service", port: 8082, url: "http://localhost:8082/health", database: "pg_payment (Gateway)", type: "Midtrans & Settlement" },
+      { id: "svc-notification", name: "notification-service", port: 8083, url: "http://localhost:8083/health", database: "WebSocket / NATS", type: "Realtime Dispatcher" },
+    ];
+
+    const results: MicroserviceNode[] = [];
+    for (const svc of services) {
+      const start = Date.now();
+      try {
+        const url = svc.url.startsWith('http') ? svc.url : `${process.env.NEXT_PUBLIC_API_BASE_URL?.replace('/api/v1', '')}${svc.url}`;
+        await fetch(url, { signal: AbortSignal.timeout(3000) });
+        const latency = Date.now() - start;
+        results.push({
+          id: svc.id,
+          name: svc.name,
+          port: svc.port,
+          status: "OPERATIONAL",
+          latency: `${latency}ms`,
+          database: svc.database,
+          eventsProcessed: 0,
+          type: svc.type,
+        });
+      } catch {
+        results.push({
+          id: svc.id,
+          name: svc.name,
+          port: svc.port,
+          status: "OFFLINE",
+          latency: "—",
+          database: svc.database,
+          eventsProcessed: 0,
+          type: svc.type,
+        });
+      }
+    }
+    return results;
+  }
+
   static getSagaEvents(): SagaEventItem[] {
     return INITIAL_SAGA_EVENTS;
   }

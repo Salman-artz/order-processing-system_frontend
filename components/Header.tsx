@@ -26,18 +26,17 @@ export default function Header() {
       {/* Brand & Emblem */}
       <div className="flex items-center gap-3">
         <Link href={user?.role === "ADMIN" ? "/admin/dashboard" : "/customer/products"} className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded bg-card border border-border flex items-center justify-center font-mono font-black text-sm text-interactive shadow-sm">
-            ⚡
-          </div>
+          <img
+            src="/brand/warehouseflow-icon.svg"
+            alt="WarehouseFlow"
+            className="w-7 h-7 object-contain"
+          />
           <div className="flex flex-col">
             <span className="tech-data font-bold tracking-tight text-sm text-text-main flex items-center gap-1.5">
-              OPS<span className="text-text-dim font-normal">/</span>MICROSERVICES
-              <span className="text-[10px] px-1.5 py-0.2 rounded bg-card border border-border text-interactive font-mono">
-                SAGA CHOREOGRAPHY
-              </span>
+              Warehouse<span className="text-interactive font-extrabold">Flow</span>
             </span>
             <span className="text-[10px] text-text-muted font-mono tracking-wider">
-              HIGH-THROUGHPUT DISTRIBUTED EVENT BUS
+              From Inventory to Delivery, in Real Time.
             </span>
           </div>
         </Link>

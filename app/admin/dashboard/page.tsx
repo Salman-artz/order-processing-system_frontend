@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { OrderService } from "@/services/order.service";
+import { ProductService, ProductItem } from "@/services/product.service";
 import { SagaService, MicroserviceNode, TraceSpan } from "@/services/saga.service";
 import TraceDrawer from "@/components/TraceDrawer";
 import SagaTimeline from "@/components/SagaTimeline";
@@ -43,12 +44,6 @@ const THROUGHPUT_DATA = [
   { time: "11:30", events: 1420, latency: 14 },
 ];
 
-const SAGA_STATUS_DISTRIBUTION = [
-  { name: "COMPLETED", value: 88, color: "#10B981" },
-  { name: "CANCELLED / ROLLBACK", value: 8, color: "#EF4444" },
-  { name: "IN-PROGRESS", value: 4, color: "#F59E0B" },
-];
-
 export default function AdminDashboardPage() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [drawerOrderId, setDrawerOrderId] = useState("ord-8f92a104");
@@ -61,7 +56,26 @@ export default function AdminDashboardPage() {
     staleTime: 10_000,
   });
 
-  const microservices = SagaService.getMicroservicesHealth();
+  const { data: products = [] } = useQuery<ProductItem[]>({
+    queryKey: ["admin-products-dashboard"],
+    queryFn: () => ProductService.getProducts(),
+    staleTime: 15_000,
+  });
+
+  const { data: metrics } = useQuery({
+    queryKey: ["admin-metrics"],
+    queryFn: () => OrderService.getMetrics(),
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  });
+
+  const { data: healthData } = useQuery({
+    queryKey: ["services-health"],
+    queryFn: () => SagaService.getMicroservicesHealthAsync(),
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  });
+  const microservices = healthData ?? SagaService.getMicroservicesHealth();
 
   const handleOpenTrace = (orderId: string) => {
     setDrawerOrderId(orderId);
@@ -69,9 +83,21 @@ export default function AdminDashboardPage() {
     setIsDrawerOpen(true);
   };
 
-  const completedCount = orders.filter((o) => o.status === "COMPLETED").length || 18;
-  const cancelledCount = orders.filter((o) => o.status === "CANCELLED").length || 2;
-  const totalOrders = orders.length || 20;
+  const completedCount = orders.filter((o) => o.status === "COMPLETED").length;
+  const cancelledCount = orders.filter((o) => o.status === "CANCELLED").length;
+  const totalOrders = orders.length;
+
+  const totalSKUs = products.length;
+  const totalPhysical = products.reduce((sum, p) => sum + p.stock, 0);
+  const totalAvailable = products.reduce((sum, p) => sum + p.stock_available, 0);
+  const totalReserved = products.reduce((sum, p) => sum + p.stock_reserved, 0);
+  const lowStockCount = products.filter((p) => p.is_low_stock).length;
+
+  const sagaDistribution = [
+    { name: "COMPLETED", value: orders.filter(o => o.status === "COMPLETED").length, color: "#35B779" },
+    { name: "CANCELLED / ROLLBACK", value: orders.filter(o => o.status === "CANCELLED").length, color: "#EF4444" },
+    { name: "IN-PROGRESS", value: orders.filter(o => ["PENDING", "RESERVED", "PAID"].includes(o.status)).length, color: "#F59E0B" },
+  ];
 
   return (
     <div className="space-y-4 font-mono select-none">
@@ -96,22 +122,26 @@ export default function AdminDashboardPage() {
         </div>
 
         <div className="flex items-center gap-2 text-xs">
-          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-card border border-border text-success font-semibold">
-            <span className="w-2 h-2 rounded-full bg-success" /> ALL 4 SERVICES OPERATIONAL
+          <span className={clsx(
+            "flex items-center gap-1.5 px-2.5 py-1 rounded bg-card border border-border font-semibold",
+            microservices.every(s => s.status === "OPERATIONAL") ? "text-success" : "text-warning"
+          )}>
+            <span className={clsx("w-2 h-2 rounded-full", microservices.every(s => s.status === "OPERATIONAL") ? "bg-success" : "bg-warning")} />
+            {microservices.filter(s => s.status === "OPERATIONAL").length}/{microservices.length} SERVICES OPERATIONAL
           </span>
         </div>
       </div>
 
-      {/* KPI Telemetry Cards Grid */}
+      {/* KPI Telemetry Cards Grid: Saga & Throughput */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="p-3.5 rounded bg-panel border border-border space-y-1">
           <div className="flex items-center justify-between text-text-dim text-[11px]">
             <span>TOTAL SAGA EVENTS</span>
             <Activity size={14} className="text-interactive" />
           </div>
-          <div className="text-xl font-bold text-text-main tech-data">56,380</div>
+          <div className="text-xl font-bold text-text-main tech-data">{totalOrders.toLocaleString()}</div>
           <div className="text-[10px] text-text-muted flex items-center gap-1">
-            <span className="text-success font-semibold">+1,420 evt/s</span> via JetStream
+            <span className="text-success font-semibold">{completedCount} completed</span> / {cancelledCount} cancelled
           </div>
         </div>
 
@@ -120,7 +150,7 @@ export default function AdminDashboardPage() {
             <span>SAGA SUCCESS RATE</span>
             <CheckCircle2 size={14} className="text-success" />
           </div>
-          <div className="text-xl font-bold text-success tech-data">98.4%</div>
+          <div className="text-xl font-bold text-success tech-data">{totalOrders > 0 ? ((completedCount / totalOrders) * 100).toFixed(1) : '0'}%</div>
           <div className="text-[10px] text-text-muted">
             {completedCount} committed / {cancelledCount} compensated
           </div>
@@ -131,7 +161,7 @@ export default function AdminDashboardPage() {
             <span>MEDIAN LATENCY (p50)</span>
             <Clock size={14} className="text-interactive" />
           </div>
-          <div className="text-xl font-bold text-text-main tech-data">14.2ms</div>
+          <div className="text-xl font-bold text-text-main tech-data">{metrics?.median_latency ?? '14ms'}</div>
           <div className="text-[10px] text-text-muted">
             p99: 42ms across all nodes
           </div>
@@ -142,9 +172,58 @@ export default function AdminDashboardPage() {
             <span>COMPENSATION ROLLBACKS</span>
             <RotateCcw size={14} className="text-failed" />
           </div>
-          <div className="text-xl font-bold text-failed tech-data">1.6%</div>
+          <div className="text-xl font-bold text-failed tech-data">{totalOrders > 0 ? ((cancelledCount / totalOrders) * 100).toFixed(1) : '0'}%</div>
           <div className="text-[10px] text-text-muted">
             Zero stock drift in PostgreSQL
+          </div>
+        </div>
+      </div>
+
+      {/* WMS Warehouse Inventory Telemetry Strip */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="p-3.5 rounded bg-panel border border-border space-y-1">
+          <div className="flex items-center justify-between text-text-dim text-[11px]">
+            <span>CATALOG ACTIVE SKUS</span>
+            <Layers size={14} className="text-interactive" />
+          </div>
+          <div className="text-xl font-bold text-text-main tech-data">{totalSKUs} SKUs</div>
+          <div className="text-[10px] text-text-muted flex items-center gap-1">
+            <span className={lowStockCount > 0 ? "text-failed font-semibold" : "text-success font-semibold"}>
+              {lowStockCount} below min threshold
+            </span>
+          </div>
+        </div>
+
+        <div className="p-3.5 rounded bg-panel border border-border space-y-1">
+          <div className="flex items-center justify-between text-text-dim text-[11px]">
+            <span>PHYSICAL ON-HAND STOCK</span>
+            <CheckCircle2 size={14} className="text-success" />
+          </div>
+          <div className="text-xl font-bold text-text-main tech-data">{totalPhysical} Units</div>
+          <div className="text-[10px] text-text-muted">
+            Across active storage bins
+          </div>
+        </div>
+
+        <div className="p-3.5 rounded bg-panel border border-border space-y-1">
+          <div className="flex items-center justify-between text-text-dim text-[11px]">
+            <span>AVAILABLE UNLOCKED</span>
+            <CheckCircle2 size={14} className="text-success" />
+          </div>
+          <div className="text-xl font-bold text-success tech-data">{totalAvailable} Units</div>
+          <div className="text-[10px] text-text-muted">
+            Ready for customer allocation
+          </div>
+        </div>
+
+        <div className="p-3.5 rounded bg-panel border border-border space-y-1">
+          <div className="flex items-center justify-between text-text-dim text-[11px]">
+            <span>SAGA RESERVED LOCKS</span>
+            <RotateCcw size={14} className="text-interactive" />
+          </div>
+          <div className="text-xl font-bold text-interactive tech-data">{totalReserved} Units</div>
+          <div className="text-[10px] text-text-muted">
+            Pessimistic Saga transaction locks
           </div>
         </div>
       </div>
@@ -196,7 +275,7 @@ export default function AdminDashboardPage() {
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
-                  data={SAGA_STATUS_DISTRIBUTION}
+                  data={sagaDistribution}
                   cx="50%"
                   cy="50%"
                   innerRadius={45}
@@ -204,7 +283,7 @@ export default function AdminDashboardPage() {
                   paddingAngle={4}
                   dataKey="value"
                 >
-                  {SAGA_STATUS_DISTRIBUTION.map((entry, index) => (
+                  {sagaDistribution.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
@@ -221,13 +300,13 @@ export default function AdminDashboardPage() {
           </div>
 
           <div className="space-y-1.5 text-[11px] border-t border-border pt-2.5">
-            {SAGA_STATUS_DISTRIBUTION.map((item) => (
+            {sagaDistribution.map((item) => (
               <div key={item.name} className="flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-text-muted">
                   <span className="w-2 h-2 rounded-xs" style={{ backgroundColor: item.color }} />
                   {item.name}
                 </span>
-                <span className="font-bold text-text-main">{item.value}%</span>
+                <span className="font-bold text-text-main">{item.value}</span>
               </div>
             ))}
           </div>
@@ -249,7 +328,12 @@ export default function AdminDashboardPage() {
             <div key={svc.id} className="p-3 rounded bg-card/60 border border-border space-y-1.5">
               <div className="flex items-center justify-between">
                 <span className="font-bold text-xs text-text-main">{svc.name}</span>
-                <span className="text-[10px] text-success px-1 py-0.5 rounded bg-success/10 border border-success/30 font-bold">
+                <span className={clsx(
+                  "text-[10px] px-1 py-0.5 rounded font-bold",
+                  svc.status === "OPERATIONAL" ? "text-success bg-success/10 border border-success/30" :
+                  svc.status === "DEGRADED" ? "text-warning bg-warning/10 border border-warning/30" :
+                  "text-failed bg-failed/10 border border-failed/30"
+                )}>
                   {svc.status}
                 </span>
               </div>

@@ -19,8 +19,13 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Order Processing System",
-  description: "Next.js 14 Frontend for OPS",
+  title: "WarehouseFlow — Distributed Warehouse Management & Fulfillment Platform",
+  description: "From Inventory to Delivery, in Real Time. Enterprise WMS powered by Saga Choreography and NATS JetStream.",
+  icons: {
+    icon: "/brand/warehouseflow-favicon.svg",
+    shortcut: "/brand/warehouseflow-favicon.svg",
+    apple: "/brand/warehouseflow-icon.png",
+  },
 };
 
 export default function RootLayout({

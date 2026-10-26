@@ -13,7 +13,21 @@ export interface Product {
   stock: number;
 }
 
-export type OrderStatus = 'PENDING' | 'RESERVED' | 'PAID' | 'COMPLETED' | 'CANCELLED';
+export type OrderStatus = 
+  | 'PENDING' 
+  | 'INVENTORY_RESERVED' 
+  | 'RESERVED' 
+  | 'PAYMENT_PENDING' 
+  | 'PAID' 
+  | 'CONFIRMED' 
+  | 'PICKING' 
+  | 'PACKED' 
+  | 'DISPATCHED' 
+  | 'COMPLETED' 
+  | 'PAYMENT_FAILED' 
+  | 'CANCELLED' 
+  | 'COMPENSATION_PENDING' 
+  | 'COMPENSATION_FAILED';
 
 export interface OrderItem {
   id?: string;

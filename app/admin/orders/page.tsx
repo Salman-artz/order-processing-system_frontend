@@ -111,7 +111,7 @@ export default function AdminOrdersPage() {
                 return (
                   <tr key={order.id} className="hover:bg-card/80 transition-colors">
                     <td className="py-2.5 px-3 font-semibold text-text-main">
-                      <Link href={`/customer/orders/${order.id}`} className="text-interactive hover:underline">
+                      <Link href={`/admin/orders/${order.id}`} className="text-interactive hover:underline">
                         {order.id}
                       </Link>
                     </td>
@@ -130,7 +130,7 @@ export default function AdminOrdersPage() {
                         Trace Spans
                       </button>
                       <Link
-                        href={`/customer/orders/${order.id}`}
+                        href={`/admin/orders/${order.id}`}
                         className="px-2 py-1 rounded bg-interactive/15 border border-interactive/50 text-interactive hover:bg-interactive/25 transition-colors text-[11px] font-semibold"
                       >
                         Timeline View

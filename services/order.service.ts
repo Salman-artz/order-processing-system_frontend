@@ -9,6 +9,19 @@ export interface CreateOrderPayload {
   }>;
 }
 
+export interface FulfillmentMetrics {
+  total_orders: number;
+  pending_fulfillment: number;
+  picking_orders: number;
+  packed_orders: number;
+  dispatched_orders: number;
+  completed_orders: number;
+  cancelled_orders: number;
+  total_revenue: number;
+  median_latency?: string;
+  status_counts: Record<string, number>;
+}
+
 export const MOCK_ORDERS_STORE: Order[] = [
   {
     id: "ord-8f92a104",
@@ -31,7 +44,7 @@ export const MOCK_ORDERS_STORE: Order[] = [
   {
     id: "ord-710da9c2",
     userId: "usr-cust-03",
-    status: "RESERVED",
+    status: "INVENTORY_RESERVED",
     totalAmount: 4500000,
     items: [{ productId: "13ab7375-c7b2-4e83-8cc0-dfd981ed74d7", quantity: 1, price: 4500000 }],
     createdAt: new Date(Date.now() - 3600000 * 8).toISOString(),
@@ -40,7 +53,7 @@ export const MOCK_ORDERS_STORE: Order[] = [
   {
     id: "ord-3a81f57d",
     userId: "usr-cust-01",
-    status: "COMPLETED",
+    status: "CONFIRMED",
     totalAmount: 8750000,
     items: [{ productId: "79e5bb66-f451-4960-b144-1dc6af9866f1", quantity: 1, price: 8750000 }],
     createdAt: new Date(Date.now() - 3600000 * 12).toISOString(),
@@ -58,12 +71,16 @@ export const MOCK_ORDERS_STORE: Order[] = [
 ];
 
 export class OrderService {
+  static isMock(): boolean {
+    return process.env.NEXT_PUBLIC_USE_MOCK === "true";
+  }
+
   static async createOrder(payload: CreateOrderPayload): Promise<Order> {
-    if (process.env.NEXT_PUBLIC_USE_MOCK === "true") {
+    if (this.isMock()) {
       const total = payload.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
       const newOrder: Order = {
         id: `ord-${Math.random().toString(36).substring(2, 10)}`,
-        status: "COMPLETED",
+        status: "CONFIRMED",
         totalAmount: total,
         items: payload.items.map((i) => ({
           productId: i.product_id,
@@ -82,7 +99,7 @@ export class OrderService {
   }
 
   static async simulateFailureOrder(payload: CreateOrderPayload): Promise<Order> {
-    if (process.env.NEXT_PUBLIC_USE_MOCK === "true") {
+    if (this.isMock()) {
       const total = payload.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
       const newOrder: Order = {
         id: `ord-fail-${Math.random().toString(36).substring(2, 10)}`,
@@ -103,14 +120,14 @@ export class OrderService {
     // Amount trigger for backend simulation fail (balance insufficient / limit exceeded)
     const failItems = payload.items.map((item) => ({
       ...item,
-      price: 8888, // Specific simulated trigger recognized by backend payment-service
+      price: 8888, // Specific trigger recognized by backend payment-service
     }));
     const res = await api.post('/orders', { items: failItems });
     return res.data.order ?? res.data;
   }
 
   static async getOrderById(orderId: string): Promise<Order> {
-    if (process.env.NEXT_PUBLIC_USE_MOCK === "true") {
+    if (this.isMock()) {
       const found = MOCK_ORDERS_STORE.find((o) => o.id === orderId);
       if (found) return found;
       return {
@@ -123,103 +140,132 @@ export class OrderService {
       };
     }
     const res = await api.get(`/orders/${orderId}`);
-    return res.data.order ?? res.data;
+    const item = res.data.order ?? res.data;
+    return {
+      id: item.id,
+      userId: item.customer_id || item.userId,
+      status: item.status,
+      totalAmount: typeof item.total_amount === 'string'
+        ? parseFloat(item.total_amount.replace(',', '.'))
+        : Number(item.total_amount ?? item.totalAmount ?? 0),
+      items: item.items || [],
+      createdAt: item.created_at || item.createdAt,
+      updatedAt: item.updated_at || item.updatedAt,
+    };
   }
 
   static async listCustomerOrders(): Promise<Order[]> {
-    if (process.env.NEXT_PUBLIC_USE_MOCK === "true") {
+    if (this.isMock()) {
       return MOCK_ORDERS_STORE;
     }
-    try {
-      const res = await api.get('/orders');
-      const list = res.data.orders ?? res.data;
-      if (Array.isArray(list)) {
-        return list.map((item: any) => ({
-          id: item.id,
-          userId: item.customer_id || item.userId,
-          status: item.status,
-          totalAmount: typeof item.total_amount === 'string' 
-            ? parseFloat(item.total_amount.replace(',', '.')) 
-            : Number(item.total_amount ?? item.totalAmount ?? 0),
-          items: item.items || [],
-          createdAt: item.created_at || item.createdAt,
-          updatedAt: item.updated_at || item.updatedAt,
-        }));
-      }
-      return MOCK_ORDERS_STORE;
-    } catch {
-      return MOCK_ORDERS_STORE;
+    const res = await api.get('/orders');
+    const list = res.data.orders ?? res.data;
+    if (Array.isArray(list)) {
+      return list.map((item: any) => ({
+        id: item.id,
+        userId: item.customer_id || item.userId,
+        status: item.status,
+        totalAmount: typeof item.total_amount === 'string'
+          ? parseFloat(item.total_amount.replace(',', '.'))
+          : Number(item.total_amount ?? item.totalAmount ?? 0),
+        items: item.items || [],
+        createdAt: item.created_at || item.createdAt,
+        updatedAt: item.updated_at || item.updatedAt,
+      }));
     }
+    return [];
   }
 
   static async listAllOrders(): Promise<Order[]> {
-    if (process.env.NEXT_PUBLIC_USE_MOCK === "true") {
+    if (this.isMock()) {
       return MOCK_ORDERS_STORE;
     }
-    try {
-      const res = await api.get('/admin/orders');
-      const list = res.data.orders ?? res.data;
-      if (Array.isArray(list)) {
-        return list.map((item: any) => ({
-          id: item.id,
-          userId: item.customer_id || item.userId,
-          status: item.status,
-          totalAmount: typeof item.total_amount === 'string' 
-            ? parseFloat(item.total_amount.replace(',', '.')) 
-            : Number(item.total_amount ?? item.totalAmount ?? 0),
-          items: item.items || [],
-          createdAt: item.created_at || item.createdAt,
-          updatedAt: item.updated_at || item.updatedAt,
-        }));
+    const res = await api.get('/admin/orders');
+    const list = res.data.orders ?? res.data;
+    if (Array.isArray(list)) {
+      return list.map((item: any) => ({
+        id: item.id,
+        userId: item.customer_id || item.userId,
+        status: item.status,
+        totalAmount: typeof item.total_amount === 'string'
+          ? parseFloat(item.total_amount.replace(',', '.'))
+          : Number(item.total_amount ?? item.totalAmount ?? 0),
+        items: item.items || [],
+        createdAt: item.created_at || item.createdAt,
+        updatedAt: item.updated_at || item.updatedAt,
+      }));
+    }
+    return [];
+  }
+
+  static async advanceFulfillment(orderId: string, status: string, notes?: string): Promise<Order> {
+    if (this.isMock()) {
+      const order = MOCK_ORDERS_STORE.find((o) => o.id === orderId);
+      if (order) {
+        order.status = status as OrderStatus;
+        order.updatedAt = new Date().toISOString();
+        return order;
       }
-      return MOCK_ORDERS_STORE;
-    } catch {
-      return MOCK_ORDERS_STORE;
+      throw new Error("Order not found in mock store");
     }
+    const res = await api.patch(`/admin/orders/${orderId}/fulfillment`, { status, notes });
+    return res.data.order ?? res.data;
+  }
+
+  static async cancelOrder(orderId: string, reason?: string): Promise<Order> {
+    if (this.isMock()) {
+      const order = MOCK_ORDERS_STORE.find((o) => o.id === orderId);
+      if (order) {
+        order.status = "CANCELLED";
+        order.updatedAt = new Date().toISOString();
+        return order;
+      }
+      throw new Error("Order not found in mock store");
+    }
+    const res = await api.post(`/admin/orders/${orderId}/cancel`, { reason });
+    return res.data.order ?? res.data;
   }
 
   static async getOrderTimeline(orderId: string): Promise<SagaLog[]> {
-    if (process.env.NEXT_PUBLIC_USE_MOCK === "true") {
-      const isFailed = orderId.includes('fail') || orderId === 'ord-e41c7b89';
-      if (isFailed) {
-        return [
-          { id: "log-1", orderId, eventType: "order.created", status: "SUCCESS", payload: { order_id: orderId, action: "Order persisted as PENDING" }, createdAt: new Date(Date.now() - 4000).toISOString() },
-          { id: "log-2", orderId, eventType: "inventory.reserved", status: "SUCCESS", payload: { order_id: orderId, action: "Stock lock acquired in PostgreSQL" }, createdAt: new Date(Date.now() - 3200).toISOString() },
-          { id: "log-3", orderId, eventType: "payment.failed", status: "FAILED", payload: { order_id: orderId, reason: "Transaction limit exceeded (> Rp 10.000.000)" }, createdAt: new Date(Date.now() - 2100).toISOString() },
-          { id: "log-4", orderId, eventType: "inventory.released", status: "COMPENSATED", payload: { order_id: orderId, action: "SAGA COMPENSATION: Stock unlocked & refunded back to inventory" }, createdAt: new Date(Date.now() - 1100).toISOString() },
-          { id: "log-5", orderId, eventType: "order.cancelled", status: "CANCELLED", payload: { order_id: orderId, final_status: "CANCELLED", compensation: "Completed" }, createdAt: new Date(Date.now() - 200).toISOString() },
-        ];
-      }
-      return [
-        { id: "log-1", orderId, eventType: "order.created", status: "SUCCESS", payload: { order_id: orderId, action: "Order initialized" }, createdAt: new Date(Date.now() - 3500).toISOString() },
-        { id: "log-2", orderId, eventType: "inventory.reserved", status: "SUCCESS", payload: { order_id: orderId, action: "Stock locked" }, createdAt: new Date(Date.now() - 2700).toISOString() },
-        { id: "log-3", orderId, eventType: "payment.success", status: "SUCCESS", payload: { order_id: orderId, action: "Payment verified via Midtrans" }, createdAt: new Date(Date.now() - 1500).toISOString() },
-        { id: "log-4", orderId, eventType: "order.completed", status: "SUCCESS", payload: { order_id: orderId, final_status: "COMPLETED" }, createdAt: new Date(Date.now() - 400).toISOString() },
-      ];
+    if (this.isMock()) {
+      return [];
     }
+    const res = await api.get(`/admin/orders/${orderId}/timeline`);
+    return res.data.timeline ?? res.data ?? [];
+  }
 
-    try {
-      const res = await api.get(`/admin/orders/${orderId}/timeline`);
-      const list = res.data.timeline ?? res.data;
-      if (Array.isArray(list)) {
-        return list.map((item: any) => ({
-          id: item.id,
-          orderId: item.order_id || item.orderId || orderId,
-          eventType: item.event_type || item.eventType,
-          status: (item.event_type || "").includes("failed") 
-            ? "FAILED" 
-            : (item.event_type || "").includes("released") || (item.event_type || "").includes("compensat")
-            ? "COMPENSATED" 
-            : (item.event_type || "").includes("cancelled")
-            ? "CANCELLED"
-            : "SUCCESS",
-          payload: item.payload,
-          createdAt: item.created_at || item.createdAt,
-        }));
-      }
-      return [];
-    } catch {
-      return [];
+  static async getMetrics(): Promise<FulfillmentMetrics> {
+    if (this.isMock()) {
+      const statusCounts: Record<string, number> = {};
+      let totalRev = 0;
+      MOCK_ORDERS_STORE.forEach((o) => {
+        statusCounts[o.status] = (statusCounts[o.status] || 0) + 1;
+        totalRev += Number(o.totalAmount ?? o.total_amount ?? 0);
+      });
+      return {
+        total_orders: MOCK_ORDERS_STORE.length,
+        pending_fulfillment: (statusCounts["CONFIRMED"] || 0) + (statusCounts["PENDING"] || 0),
+        picking_orders: statusCounts["PICKING"] || 0,
+        packed_orders: statusCounts["PACKED"] || 0,
+        dispatched_orders: statusCounts["DISPATCHED"] || 0,
+        completed_orders: statusCounts["COMPLETED"] || 0,
+        cancelled_orders: (statusCounts["CANCELLED"] || 0) + (statusCounts["PAYMENT_FAILED"] || 0),
+        total_revenue: totalRev,
+        status_counts: statusCounts,
+      };
     }
+    const res = await api.get('/admin/metrics');
+    const data = res.data.metrics ?? res.data;
+    return {
+      total_orders: Number(data.total_orders ?? 0),
+      pending_fulfillment: Number(data.pending_fulfillment ?? 0),
+      picking_orders: Number(data.picking_orders ?? 0),
+      packed_orders: Number(data.packed_orders ?? 0),
+      dispatched_orders: Number(data.dispatched_orders ?? 0),
+      completed_orders: Number(data.completed_orders ?? 0),
+      cancelled_orders: Number(data.cancelled_orders ?? 0),
+      total_revenue: Number(data.total_revenue ?? 0),
+      status_counts: data.status_counts ?? {},
+    };
   }
 }

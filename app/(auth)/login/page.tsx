@@ -5,10 +5,11 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { AuthService } from "@/services/auth.service";
 import { useThemeStore } from "@/lib/store/useThemeStore";
 import { toast } from "sonner";
-import { Sun, Moon, ShieldCheck, Radio, Cpu, ArrowRight, Lock, Mail } from "lucide-react";
+import { Sun, Moon, Radio, Cpu, ArrowRight, Lock, Mail } from "lucide-react";
 import clsx from "clsx";
 
 const schema = z.object({
@@ -21,18 +22,16 @@ type FormData = z.infer<typeof schema>;
 export default function LoginPage() {
   const router = useRouter();
   const { theme, toggleTheme } = useThemeStore();
-  const [loadingRole, setLoadingRole] = useState<string | null>(null);
 
   const {
     register,
     handleSubmit,
-    setValue,
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
-      email: "admin@ops.io",
-      password: "password123",
+      email: "",
+      password: "",
     },
   });
 
@@ -50,38 +49,16 @@ export default function LoginPage() {
     }
   };
 
-  const handleQuickLogin = async (role: "ADMIN" | "CUSTOMER") => {
-    setLoadingRole(role);
-    const email = role === "ADMIN" ? "admin@ops.io" : "customer@ops.io";
-    setValue("email", email);
-    setValue("password", "password123");
-    try {
-      const res = await AuthService.login({ email, password: "password123" });
-      toast.success("Demo Session Activated", {
-        description: `Logged in as ${role}: ${email}`,
-      });
-      router.replace(role === "ADMIN" ? "/admin/dashboard" : "/customer/products");
-    } catch (err: any) {
-      toast.error("Login failed");
-    } finally {
-      setLoadingRole(null);
-    }
-  };
-
   return (
     <div className="min-h-screen w-full flex flex-col justify-between bg-background p-4 sm:p-8 select-none font-mono">
       {/* Top Header / Switcher */}
       <div className="flex items-center justify-between max-w-4xl w-full mx-auto">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded bg-panel border border-border flex items-center justify-center font-bold text-interactive text-sm shadow-xs">
-            ⚡
-          </div>
-          <div>
-            <span className="font-bold text-sm tracking-tight text-text-main flex items-center gap-1.5">
-              OPS<span className="text-text-dim">/</span>MICROSERVICES
-            </span>
-            <span className="block text-[10px] text-text-muted">DISTRIBUTED SAGA TELEMETRY</span>
-          </div>
+        <div className="flex items-center gap-3">
+          <img
+            src="/brand/warehouseflow-logo-horizontal.svg"
+            alt="WarehouseFlow"
+            className="h-8 object-contain"
+          />
         </div>
 
         {/* Theme Toggle */}
@@ -100,39 +77,11 @@ export default function LoginPage() {
           {/* Header */}
           <div className="space-y-1 text-center">
             <h1 className="heading text-xl font-bold text-text-main tracking-tight">
-              Enterprise Operations Console
+              WarehouseFlow Console
             </h1>
             <p className="text-xs text-text-muted">
-              Authenticate to manage distributed Saga transactions
+              From Inventory to Delivery, in Real Time.
             </p>
-          </div>
-
-          {/* Quick Demo Selector */}
-          <div className="p-3 rounded bg-background border border-border space-y-2">
-            <div className="text-[10px] text-text-dim uppercase tracking-wider flex justify-between">
-              <span>Quick Demo Profiles:</span>
-              <span className="text-success font-semibold">Ready to Test</span>
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <button
-                type="button"
-                disabled={loadingRole !== null}
-                onClick={() => handleQuickLogin("ADMIN")}
-                className="py-2 px-3 rounded bg-panel border border-border hover:border-interactive text-text-main transition-all font-semibold flex items-center justify-center gap-1.5"
-              >
-                <ShieldCheck size={13} className="text-interactive" />
-                <span>Admin Lead</span>
-              </button>
-              <button
-                type="button"
-                disabled={loadingRole !== null}
-                onClick={() => handleQuickLogin("CUSTOMER")}
-                className="py-2 px-3 rounded bg-panel border border-border hover:border-interactive text-text-main transition-all font-semibold flex items-center justify-center gap-1.5"
-              >
-                <Mail size={13} className="text-interactive" />
-                <span>Customer</span>
-              </button>
-            </div>
           </div>
 
           {/* Form */}
@@ -177,6 +126,13 @@ export default function LoginPage() {
               <span>{isSubmitting ? "Authenticating..." : "Sign In to Cluster"}</span>
               <ArrowRight size={14} />
             </button>
+
+            <div className="text-center pt-2 text-text-dim text-[11px]">
+              Don&apos;t have an account?{" "}
+              <Link href="/register" className="text-interactive hover:underline">
+                Create Account
+              </Link>
+            </div>
           </form>
 
           {/* Telemetry Footer Meta */}
@@ -197,7 +153,7 @@ export default function LoginPage() {
 
       {/* Page Footer */}
       <div className="max-w-4xl w-full mx-auto text-center text-[10px] text-text-dim">
-        OPS Distributed Order Processing System • Engineering Portfolio Architecture
+        WarehouseFlow Distributed WMS & Order Fulfillment • Saga Choreography & NATS JetStream
       </div>
     </div>
   );
